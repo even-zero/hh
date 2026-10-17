@@ -1,0 +1,59 @@
+name: release
+
+# Tag-driven: `git tag v2.0.0 && git push origin v2.0.0`. One job: check the
+# tag against the package version, run the tests, build, prove the wheel
+# installs, publish a GitHub Release with the artifacts.
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write        # create the GitHub Release
+
+jobs:
+  release:
+    name: verify, build, publish
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Tag matches the package version
+        run: |
+          python - <<'EOF'
+          import os, pathlib, re
+          version = re.search(r'__version__ = "([^"]+)"',
+                              pathlib.Path("executor/__init__.py").read_text()).group(1)
+          tag = os.environ["GITHUB_REF_NAME"]
+          if tag != f"v{version}":
+              raise SystemExit(f"tag {tag} does not match package version v{version}")
+          print(f"releasing v{version}")
+          EOF
+
+      - name: Install build + test dependencies
+        run: python -m pip install --quiet --disable-pip-version-check build pytest
+
+      - name: Tests
+        run: python -m unittest discover -s tests -v
+
+      - name: Build sdist + wheel
+        run: python -m build
+
+      - name: Prove the wheel works in a clean venv
+        run: |
+          set -euo pipefail
+          python -m venv /tmp/venv
+          /tmp/venv/bin/pip install --quiet --disable-pip-version-check dist/*.whl
+          /tmp/venv/bin/python -c "import executor, executor.tool; print(executor.__version__)"
+          /tmp/venv/bin/hh --store-root /tmp/hh-release-store plan \
+            --root "$GITHUB_WORKSPACE/fixtures/synth_tiny_7" --out /tmp/plan.json > /dev/null
+          /tmp/venv/bin/hh --store-root /tmp/hh-release-store run \
+            --plan /tmp/plan.json --root "$GITHUB_WORKSPACE/fixtures/synth_tiny_7" > /dev/null
+
+      - name: Publish GitHub Release with artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" dist/* --title "hh $GITHUB_REF_NAME" --generate-notes

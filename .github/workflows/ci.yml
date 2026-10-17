@@ -1,0 +1,285 @@
+name: ci
+
+# The product is one tool and one benchmark. CI runs the tests, smokes the CLI,
+# and proves the wheel installs and works from a clean venv. Nothing else.
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  tests:
+    name: tests (py${{ matrix.python }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # oldest supported and newest stable; the suite is quick, the range is
+        # what matters.
+        python: ["3.10", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "${{ matrix.python }}"
+
+      # hh itself is stdlib-only; pytest is installed because the pytest
+      # adapter is part of what these tests exercise.
+      - name: Install test dependency
+        run: python -m pip install --quiet --disable-pip-version-check pytest
+
+      - name: Unit and end-to-end tests
+        run: |
+          set +e
+          python -m unittest discover -s tests -v > /tmp/tests.log 2>&1
+          status=$?
+          if [ "$status" -ne 0 ]; then
+            # The job log is not always reachable from outside; annotations are.
+            { grep -E "^(FAIL|ERROR):" -A 6 /tmp/tests.log | head -n 40
+              grep -E "^(Ran |OK|FAILED)" /tmp/tests.log | tail -n 3
+              tail -n 6 /tmp/tests.log
+            } 2>/dev/null | while IFS= read -r line; do
+              line="${line//$'\r'/}"
+              line="${line//'%'/'%25'}"
+              echo "::error::$line"
+            done
+          fi
+          exit "$status"
+
+      - name: CLI smoke (plan -> run -> report on the fixture)
+        run: |
+          python -m executor --version
+          python -m executor tool-spec > /tmp/tool.json
+          python -c "import json; assert json.load(open('/tmp/tool.json'))['name'] == 'run_tests'"
+          python -m executor --store-root /tmp/hh-store plan \
+            --root fixtures/synth_tiny_7 --out /tmp/plan.json > /dev/null
+          python -m executor --store-root /tmp/hh-store run \
+            --plan /tmp/plan.json --root fixtures/synth_tiny_7 > /dev/null
+          python -m executor --store-root /tmp/hh-store report > /tmp/report.json
+          python -c "import json; d = json.load(open('/tmp/report.json')); assert d['tests_tracked'] > 0, d"
+
+  junit:
+    name: junit (jdk 17)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      # The adapter compiles HhJunit.java with javac and needs the JUnit
+      # Platform on the test classpath; this job is what proves the Java side
+      # works, since the unit stub only covers the Python half.
+      - name: Fetch the JUnit Platform console launcher
+        run: |
+          curl -fsSL -o "$RUNNER_TEMP/junit-platform-console-standalone.jar" \
+            https://repo1.maven.org/maven2/org/junit/platform/junit-platform-console-standalone/1.11.4/junit-platform-console-standalone-1.11.4.jar
+
+      - name: Install test dependency
+        run: python -m pip install --quiet --disable-pip-version-check pytest
+
+      - name: Tests, with a real JUnit 5 suite
+        env:
+          HH_JUNIT_CLASSPATH: ${{ runner.temp }}/junit-platform-console-standalone.jar
+        run: |
+          set +e
+          python -m unittest discover -s tests -v > /tmp/tests.log 2>&1
+          status=$?
+          if [ "$status" -ne 0 ]; then
+            # The job log is not always reachable from outside; annotations are.
+            tail -n 10 /tmp/tests.log | while IFS= read -r line; do
+              line="${line//$'\r'/}"
+              line="${line//'%'/'%25'}"
+              echo "::error::$line"
+            done
+          fi
+          exit "$status"
+
+      - name: The real JUnit test must run in this job
+        run: |
+          if grep -q "skipped 'needs a JDK" /tmp/tests.log; then
+            echo "::error::the JUnit integration test was skipped in the JUnit job"
+            exit 1
+          fi
+          grep -E "test_real_suite_records_and_then_measures .* ok" /tmp/tests.log
+
+  js:
+    name: js adapters (node 22)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      # The adapters drive the real runners. Installing them is what proves the
+      # parsers against real output (Jest's JSON report, Vitest's, tap's TAP
+      # stream, node:test's reporter protocol) rather than a fixture written to
+      # match the parser.
+      - name: Install the JavaScript runners
+        run: |
+          mkdir -p "$RUNNER_TEMP/jsprobe"
+          cd "$RUNNER_TEMP/jsprobe"
+          npm init -y > /dev/null
+          npm install --no-audit --no-fund --loglevel=error jest vitest tap mocha
+
+      - name: Tests, with real jest / vitest / tap / mocha / node:test
+        env:
+          HH_JS_PROBE: ${{ runner.temp }}/jsprobe
+        run: |
+          set +e
+          python -m unittest discover -s tests -v > /tmp/tests.log 2>&1
+          status=$?
+          if [ "$status" -ne 0 ]; then
+            { grep -E "^(FAIL|ERROR):" -A 6 /tmp/tests.log | head -n 40
+              grep -E "^(Ran |OK|FAILED)" /tmp/tests.log | tail -n 3
+              tail -n 6 /tmp/tests.log
+            } 2>/dev/null | while IFS= read -r line; do
+              line="${line//$'\r'/}"
+              line="${line//'%'/'%25'}"
+              echo "::error::$line"
+            done
+          fi
+          exit "$status"
+
+      - name: The JavaScript adapter tests must run in this job
+        run: |
+          if grep -q "skipped 'needs HH_JS_PROBE" /tmp/tests.log; then
+            echo "::error::a jest/vitest/tap test was skipped in the js job"
+            exit 1
+          fi
+          if grep -q "skipped 'needs node >= 20" /tmp/tests.log; then
+            echo "::error::the node:test test was skipped in the js job"
+            exit 1
+          fi
+
+  systems:
+    name: systems adapters (go, rust, ruby, php, cmake)
+    runs-on: ubuntu-latest
+    env:
+      # Real toolchains run here and only here. The plain test job must not
+      # change behaviour because the runner image happens to ship a tool
+      # (ubuntu-latest already has an old phpunit on PATH).
+      HH_REAL_TOOLS: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "stable"
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: taiki-e/install-action@nextest
+
+      # Every tool here is a real one: the tests drive `go test`, `cargo
+      # nextest`, `rspec`, `phpunit` and `ctest`, and one of them would
+      # silently pass as a fixture if the parser only ever saw our own output.
+      - name: Install RSpec
+        # --user-install: the runner image's Ruby is not writable by the job.
+        run: |
+          if ! command -v ruby > /dev/null; then
+            sudo apt-get update && sudo apt-get install -y ruby-full
+          fi
+          ruby --version
+          gem install --no-document --user-install rspec
+          bindir="$(ruby -e 'print Gem.user_dir')/bin"
+          echo "$bindir" >> "$GITHUB_PATH"
+          "$bindir/rspec" --version
+
+      - name: Install PHP and PHPUnit
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends php-cli php-xml php-mbstring
+          php --version
+          curl -fsSL -o /tmp/phpunit.phar https://phar.phpunit.de/phpunit-11.phar
+          sudo install -m 755 /tmp/phpunit.phar /usr/local/bin/phpunit
+          phpunit --version
+
+      - name: Tests, with real go / nextest / rspec / phpunit / ctest
+        run: |
+          set +e
+          python -m unittest discover -s tests -v > /tmp/tests.log 2>&1
+          status=$?
+          if [ "$status" -ne 0 ]; then
+            { grep -E "^(FAIL|ERROR):" -A 6 /tmp/tests.log | head -n 40
+              grep -E "^(Ran |OK|FAILED)" /tmp/tests.log | tail -n 3
+              tail -n 6 /tmp/tests.log
+            } 2>/dev/null | while IFS= read -r line; do
+              line="${line//$'\r'/}"
+              line="${line//'%'/'%25'}"
+              echo "::error::$line"
+            done
+          fi
+          exit "$status"
+
+      - name: The systems adapter tests must run in this job
+        run: |
+          status=0
+          for reason in "needs the Go toolchain" "needs cargo-nextest" \
+                        "needs rspec" "needs phpunit" "needs cmake and ctest"; do
+            if grep -q "skipped '$reason" /tmp/tests.log; then
+              echo "::error::a systems runner test was skipped: $reason"
+              status=1
+            fi
+          done
+          # this job has no JDK and no npm probe project, so those skip; the
+          # five systems runners must not.
+
+          exit "$status"
+
+  package:
+    name: wheel
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install --quiet --disable-pip-version-check build
+      - name: Build sdist + wheel
+        run: python -m build
+      - name: Install the wheel into a clean venv and run it
+        run: |
+          set -euo pipefail
+          python -m venv /tmp/venv
+          /tmp/venv/bin/pip install --quiet --disable-pip-version-check dist/*.whl
+          /tmp/venv/bin/python -c "import executor, executor.tool, executor.adapters.unittest_stream; print(executor.__version__)"
+          /tmp/venv/bin/hh tool-spec | python -c "import json,sys; assert json.load(sys.stdin)['name'] == 'run_tests'"
+          /tmp/venv/bin/hh --store-root /tmp/hh-wheel-store plan \
+            --root "$GITHUB_WORKSPACE/fixtures/synth_tiny_7" --out /tmp/wheel-plan.json > /dev/null
+          /tmp/venv/bin/hh --store-root /tmp/hh-wheel-store run \
+            --plan /tmp/wheel-plan.json --root "$GITHUB_WORKSPACE/fixtures/synth_tiny_7" > /dev/null
+
+      - name: The wheel ships the adapters that are not Python modules
+        # The JS adapters and the RSpec formatter are package data: a wheel
+        # that forgot them would import fine and fail only at run time. Run
+        # from /tmp, because `python -c` puts the cwd (the source checkout)
+        # first on sys.path and would hide a missing wheel file.
+        working-directory: /tmp
+        run: |
+          /tmp/venv/bin/python - <<'PY'
+          import os
+          from executor.adapters import registry, rspec_stream
+          for runner in registry.NODE_ADAPTERS:
+              path = registry.node_script(runner)
+              assert os.path.exists(path), f"missing from the wheel: {path}"
+          assert os.path.exists(rspec_stream.FORMATTER), rspec_stream.FORMATTER
+          print("adapters present:", ", ".join(sorted(registry.RUNNERS)))
+          PY

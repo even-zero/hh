@@ -1,0 +1,43 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "hh"
+dynamic = ["version"]
+description = "A measured test-suite timeout for coding agents: run once to record, then never be SIGKILLed by a guessed budget"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "hh contributors" }]
+keywords = ["agents", "llm-agents", "testing", "timeout", "test-runner",
+            "pytest", "unittest", "mocha", "jest", "vitest", "tap"]
+classifiers = [
+  "Development Status :: 5 - Production/Stable",
+  "Intended Audience :: Developers",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Topic :: Software Development :: Quality Assurance",
+  "Topic :: Software Development :: Testing",
+]
+
+[project.scripts]
+hh = "executor.__main__:main"
+
+[project.urls]
+# Repository = "https://github.com/<your-org>/hh"   # uncomment after you push
+
+[tool.setuptools]
+packages = ["executor", "executor.adapters"]
+include-package-data = true
+
+[tool.setuptools.dynamic]
+version = { attr = "executor.__version__" }
+
+[tool.setuptools.package-data]
+"executor.adapters" = ["*.cjs", "*.java", "*.rb", "js/*.cjs"]
