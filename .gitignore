@@ -1,0 +1,23 @@
+# runtime data: the per-repo store + experiment scratch (never committed)
+.hh/
+.tda/
+.exp_store/
+
+# python
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.venv/
+venv/
+
+# editors / os
+.DS_Store
+.idea/
+.vscode/
+
+# tooling caches
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/

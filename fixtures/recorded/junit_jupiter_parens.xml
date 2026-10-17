@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="JUnit Jupiter" tests="4" skipped="1" failures="1" errors="0" time="1.04">
+<testcase name="fast()" classname="tda.live.SleepyTest" time="0.021"/>
+<testcase name="medium()" classname="tda.live.SleepyTest" time="0.301"/>
+<testcase name="slow()" classname="tda.live.SleepyTest" time="0.601">
+  <failure message="boom" type="java.lang.AssertionError">expected</failure>
+</testcase>
+<testcase name="skipped()" classname="tda.live.SleepyTest" time="0.002">
+  <skipped message="skip me"/>
+</testcase>
+</testsuite>

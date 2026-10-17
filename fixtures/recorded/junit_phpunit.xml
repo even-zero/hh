@@ -1,0 +1,9 @@
+<?xml version="1.0"?>
+<testsuites>
+  <testsuite name="App\Tests\UserTest" tests="2" time="0.25">
+    <testcase name="testIsVisible" class="App\Tests\UserTest" time="0.1"/>
+    <testcase name="testCannotBeBlank" class="App\Tests\UserTest" classname="App\Tests\UserTest" time="0.15">
+      <failure type="PHPUnit\Framework\ExpectationFailedException">Failed asserting that null is not null.</failure>
+    </testcase>
+  </testsuite>
+</testsuites>

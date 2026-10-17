@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<testsuites>
+  <testsuite name="pytest" errors="1" failures="0" skipped="1" tests="3" time="0.90">
+    <testcase classname="tests.test_a" name="test_ok" time="0.10"/>
+    <testcase classname="tests.test_a" name="test_boom" time="0.20">
+      <error message="ValueError">raise ValueError</error>
+    </testcase>
+    <testcase classname="tests.test_b" name="test_skip" time="0.00">
+      <skipped message="not ready"/>
+    </testcase>
+  </testsuite>
+</testsuites>

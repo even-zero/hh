@@ -1,0 +1,91 @@
+name: release
+
+# Tag-driven releases: `git tag v1.0.1 && git push origin main --tags` is the
+# whole procedure. Nothing is published unless it passes the suite and the
+# built wheel is proven installable in a clean venv.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write        # create the GitHub Release
+
+jobs:
+  verify:
+    name: verify before publishing
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Tag matches the package version
+        run: |
+          python - <<'EOF'
+          import os, re, pathlib
+          src = pathlib.Path("hh/__init__.py").read_text()
+          version = re.search(r'__version__ = "([^"]+)"', src).group(1)
+          tag = os.environ.get("GITHUB_REF_NAME", "")
+          if tag.startswith("v") and tag != f"v{version}":
+              raise SystemExit(f"tag {tag} does not match package version v{version}")
+          print(f"releasing v{version}")
+          EOF
+      - name: Test suite
+        run: python -m unittest discover -s tests -v
+      - name: Recorded-parser conformance
+        run: python experiments/conformance.py
+
+  release:
+    needs: verify
+    name: build, prove, publish
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install --upgrade build
+
+      - name: Build sdist + wheel
+        run: python -m build
+
+      - name: Prove the wheel works in a clean venv
+        run: |
+          set -euo pipefail
+          python -m venv /tmp/venv
+          /tmp/venv/bin/pip install --quiet dist/*.whl
+          /tmp/venv/bin/hh --version
+          /tmp/venv/bin/hh tool-spec | python -c "import json,sys; assert json.load(sys.stdin)['name']=='run_tests'"
+          /tmp/venv/bin/hh --store-root /tmp/h8r plan \
+            --root "$GITHUB_WORKSPACE/fixtures/synth_tiny_7" --out /tmp/plan.json
+          cd /tmp && /tmp/venv/bin/hh --store-root /tmp/h8r run \
+            --plan /tmp/plan.json --root "$GITHUB_WORKSPACE/fixtures/synth_tiny_7" --suite-id release
+          echo "wheel smoke test passed"
+
+      - name: Publish GitHub Release with artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" dist/* \
+            --title "hh $GITHUB_REF_NAME" \
+            --generate-notes
+
+      # Opt-in PyPI publish: set repository variable PUBLISH_TO_PYPI=true and a
+      # PYPI_API_TOKEN secret (or configure Trusted Publishing instead).
+      - name: Publish to PyPI
+        if: vars.PUBLISH_TO_PYPI == 'true'
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          password: ${{ secrets.PYPI_API_TOKEN }}
+
+      - name: Summary
+        run: |
+          {
+            echo "### hh $GITHUB_REF_NAME published"
+            echo
+            echo "Artifacts:"
+            ls -l dist | tail -n +2
+            echo
+            echo 'Install: `pip install "git+${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}.git@${GITHUB_REF_NAME}"`'
+          } >> "$GITHUB_STEP_SUMMARY"

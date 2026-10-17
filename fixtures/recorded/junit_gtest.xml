@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites tests="2" time="0.01">
+  <testsuite name="CalculatorTest" tests="2" time="0.01">
+    <testcase name="AddsPositiveNumbers" classname="CalculatorTest" time="0.005"/>
+    <testcase name="DividesByZero" classname="CalculatorTest" time="0.004">
+      <failure message="division by zero"/>
+    </testcase>
+  </testsuite>
+</testsuites>

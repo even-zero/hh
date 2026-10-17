@@ -1,0 +1,13 @@
+include README.md LICENSE CHANGELOG.md
+include TIME_SAVED.md TOOL_HANDLER.md
+include ARCHITECTURE.md RESULTS.md EXPERIMENTS.md
+recursive-include hh/adapters *.mjs *.cjs *.java
+recursive-include tests *.py
+recursive-include experiments *.py
+recursive-include fixtures *.py *.json *.xml *.jsonl *.trx
+global-exclude __pycache__ *.py[cod]
+prune .hh
+prune .tda
+prune .exp_store
+prune dist
+prune build

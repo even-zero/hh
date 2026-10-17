@@ -1,0 +1,9 @@
+<?xml version="1.0"?>
+<testsuites>
+  <testsuite name="auth suite" tests="2" failures="1" time="0.25">
+    <testcase name="login succeeds" classname="auth suite" time="0.15"/>
+    <testcase name="login fails on bad password" classname="auth suite" time="0.10">
+      <failure message="AssertionError: expected 401 to equal 200"/>
+    </testcase>
+  </testsuite>
+</testsuites>

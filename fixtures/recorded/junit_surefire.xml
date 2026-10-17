@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.example.UserServiceTest" tests="3" failures="1" errors="0" skipped="0" time="0.412">
+  <testcase name="createsUser" classname="com.example.UserServiceTest" time="0.125"/>
+  <testcase name="rejectsBlankEmail" classname="com.example.UserServiceTest" time="0.087"/>
+  <testcase name="notifiesOnSignup" classname="com.example.UserServiceTest" time="0.2">
+    <failure message="expected 1 notification" type="org.junit.ComparisonFailure"/>
+  </testcase>
+</testsuite>

@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="libtests" tests="2" failures="0" time="0.02">
+  <testcase name="tests::fast_works" classname="mycrate" time="0.001"/>
+  <testcase name="tests::slow_works" classname="mycrate" time="0.015"/>
+</testsuite>

@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<testsuite name="MyApp.Tests" time="0.13">
+  <testcase name="MyApp.Tests.MathTests.Add_Works" classname="MyApp.Tests.MathTests" time="0.05"/>
+  <testcase name="MyApp.Tests.MathTests.Sub_Works" classname="MyApp.Tests.MathTests" time="0.08">
+    <failure message="Expected 2"/>
+  </testcase>
+</testsuite>
