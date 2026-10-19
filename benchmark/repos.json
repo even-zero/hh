@@ -1,0 +1,133 @@
+{
+  "schema": 1,
+  "comment": "Repo descriptors for the hh benchmark. Add a repo by adding an entry here; no code changes needed unless you need a new lane. Run `python3 -m benchmark list` to inspect what the runner will do.",
+  "defaults": {
+    "naive_ladder_s": [30, 60, 120],
+    "give_up_attempts": 3,
+    "resume": {"kill_at": "auto:0.5", "rerun_budget_s": 120},
+    "measure_one_at_a_time": true
+  },
+  "repos": [
+    {
+      "id": "tornado",
+      "display": "tornado",
+      "stars": "22.2k",
+      "clone": {"url": "https://github.com/tornadoweb/tornado.git", "ref": "e2042373bf13ec274bc75b95a85c7e2cf327d52d", "depth": null},
+      "lane": "unittest_exec",
+      "pythonpath": ["."],
+      "sitecustomize": "tornado_logging.py",
+      "shim": {
+        "package_root": "tornado/test",
+        "glob": "*_test.py",
+        "suite_name": "tornado_suite",
+        "hang": {"enabled": true, "count": 2, "name": "tornado_hang", "code_key": "unittest_while_true"}
+      },
+      "suite_cmd": ["python3", "-m", "unittest", "discover", "-s", "{shim}", "-p", "test_*.py", "-t", "{shim}"],
+      "runner": "unittest",
+      "scenarios": {
+        "probe": true,
+        "clean": true,
+        "resume": true,
+        "hang": {"naive_give_up_attempts": 3, "runs": 3},
+        "workers": [1, 2]
+      },
+      "n_tests_expected": 1484,
+      "notes": "Executor lane runs against the compat shim (documented in dashboard methodology); the shim re-exports only TestCase classes DEFINED in each module. 1484 unique tests = the suite's own universe, verified equal in both arms."
+    },
+    {
+      "id": "packaging",
+      "display": "packaging",
+      "stars": "751",
+      "clone": {"url": "https://github.com/pypa/packaging.git", "ref": "ef837aad3127167671eb37b9f6bd8a94ec7ce26e", "depth": 1},
+      "lane": "capture",
+      "capture_kind": "pytest_plugin",
+      "pythonpath": ["src"],
+      "repo_cwd": ".",
+      "setup": [
+        ["python3", "-m", "pip", "install", "--quiet", "--disable-pip-version-check", "pretend", "hypothesis", "tomli_w"]
+      ],
+      "suite_cmd": ["python3", "-m", "pytest", "tests", "-q", "-p", "no:cacheprovider"],
+      "runner": "pytest",
+      "scenarios": {
+        "probe": {"root": ".", "store_suffix": "probe"},
+        "clean": true,
+        "hang": {"variant": "copy", "dest": "packaging_hang", "naive_attempts": [30, 60],
+                  "capture_attempts": [{"budget": 30, "deselect": null}, {"budget": 60, "deselect": null}, {"budget": 120, "deselect": "not never_finishes"}],
+                  "inject": [{"path": "tests/test_zzhang.py", "code_key": "pytest_while_true"}]}
+      },
+      "n_tests_expected": 62493,
+      "notes": "hang variant descopes by test name after the ledger's open interval names the culprit (scenario does this automatically)."
+    },
+    {
+      "id": "itsdangerous",
+      "display": "itsdangerous",
+      "stars": "3.1k",
+      "clone": {"url": "https://github.com/pallets/itsdangerous.git", "ref": "672971d66a2ef9f85151e53283113f33d642dabd", "depth": 1},
+      "lane": "capture",
+      "capture_kind": "pytest_plugin",
+      "pythonpath": ["src"],
+      "setup": [
+        ["python3", "-m", "pip", "install", "--quiet", "--disable-pip-version-check", "freezegun"]
+      ],
+      "suite_cmd": ["python3", "-m", "pytest", "tests", "-q", "-p", "no:cacheprovider"],
+      "runner": "pytest",
+      "scenarios": {"probe": {"root": "."}, "clean": true},
+      "n_tests_expected": 297
+    },
+    {
+      "id": "markupsafe",
+      "display": "markupsafe",
+      "stars": "698",
+      "clone": {"url": "https://github.com/pallets/markupsafe.git", "ref": "4e111271b1494995708a9e878a10829b5e10c7ba", "depth": 1},
+      "lane": "capture",
+      "capture_kind": "pytest_plugin",
+      "pythonpath": ["src"],
+      "suite_cmd": ["python3", "-m", "pytest", "tests", "-q", "-p", "no:cacheprovider"],
+      "runner": "pytest",
+      "scenarios": {"probe": {"root": "."}, "clean": true},
+      "n_tests_expected": 80,
+      "notes": "Pure-python mode unless a C extension is built upstream; skips are expected (~41) and appear in both arms identically."
+    },
+    {
+      "id": "chai",
+      "display": "chai",
+      "stars": "8.3k",
+      "clone": {"url": "https://github.com/chaijs/chai.git", "ref": "78d9637c79e211ed4f2455d9ba9b8a47be22dc6c", "depth": 1},
+      "lane": "capture",
+      "capture_kind": "mocha_reporter",
+      "pythonpath": [],
+      "setup": [
+        ["npm", "install", "--no-save", "--no-audit", "--no-fund", "mocha", "esbuild", "assertion-error", "check-error", "deep-eql", "loupe", "pathval"],
+        ["./node_modules/.bin/esbuild", "--bundle", "--format=esm", "--target=es2021", "--keep-names", "--legal-comments=none", "--outfile=index.js", "lib/chai.js"]
+      ],
+      "suite_cmd": ["./node_modules/.bin/mocha", "test/*.js"],
+      "runner": "mocha",
+      "scenarios": {"probe": {"root": ".", "runner_override": "node"}, "clean": true},
+      "n_tests_expected": 512,
+      "notes": "Suite is ESM+bundle: esbuild step reproduces upstream's `npm run build`. Reporter row identity is file-stem based (hh's reporter)."
+    },
+    {
+      "id": "_template_pytest_repo",
+      "disabled": true,
+      "display": "EXAMPLE - copy to add a repo",
+      "stars": "-",
+      "clone": {"url": "https://github.com/OWNER/REPO.git", "ref": "main", "depth": 1},
+      "lane": "capture",
+      "capture_kind": "pytest_plugin",
+      "pythonpath": ["src"],
+      "setup": [["python3", "-m", "pip", "install", "--quiet", "SOME-TEST-DEP"]],
+      "suite_cmd": ["python3", "-m", "pytest", "tests", "-q", "-p", "no:cacheprovider"],
+      "runner": "pytest",
+      "scenarios": {
+        "probe": {"root": "."},
+        "clean": true,
+        "resume": true,
+        "hang": {"variant": "copy", "dest": "REPO_hang", "naive_attempts": [30, 60, 120],
+                  "capture_attempts": [{"budget": 30, "deselect": null}, {"budget": 60, "deselect": null}, {"budget": 120, "deselect": "not never_finishes"}],
+                  "inject": [{"path": "tests/test_zzhang.py", "code_key": "pytest_while_true"}]}
+      },
+      "n_tests_expected": 0,
+      "notes": "When hh's manifest learns pytest (the /benchmark finding #6), switch \"lane\" to the new executor lane and enable workers/resume - the scenario code is shared."
+    }
+  ]
+}
