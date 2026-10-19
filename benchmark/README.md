@@ -15,6 +15,20 @@ python3 -m benchmark run -r tornado -s resume   # filters (repeatable)
 python3 -m benchmark compare      # current results vs benchmark/baseline/
 ```
 
+`--repos-file <path>` points the same commands at a different descriptor set,
+e.g. the fresh 2026-10-19 repo set:
+
+```bash
+python3 -m benchmark --repos-file benchmark/repos.fresh.json all
+```
+
+`repos.fresh.json` is a self-contained five-repo set (markdown, click, express,
+werkzeug, urllib3) used for the cross-repo comparison report
+`REPORT-2026-10-19-fresh-repos.md`; the committed `repos.json` and frozen
+baseline are unchanged. Do not use `compare` against the old baseline for this
+set: its metric names embed the original repo ids and the suites are different.
+The normalized comparison is `reports/2026-10-19-fresh-repos-compare.md`.
+
 Outputs (all gitignored): `_work/results/results.json`,
 `_work/results/dashboard.html` (open in a browser),
 `_work/results/compare.md`, plus `_work/records.jsonl` (one row per executed

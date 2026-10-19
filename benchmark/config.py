@@ -23,12 +23,16 @@ LANES = ("unittest_exec", "pytest_exec", "mocha_exec", "capture")
 CAPTURE_KINDS = ("pytest_plugin", "mocha_reporter")
 
 
+DEFAULT_REPOS_FILE = os.path.join(HERE, "repos.json")
+
+
 class ConfigError(Exception):
     pass
 
 
 def load(path: str | None = None) -> dict:
-    cfg = json.load(open(path or os.path.join(HERE, "repos.json"), encoding="utf-8"))
+    cfg = json.load(open(path or DEFAULT_REPOS_FILE, encoding="utf-8"))
+    cfg["_path"] = path or DEFAULT_REPOS_FILE
     repos = []
     for r in cfg.get("repos", []):
         if r.get("disabled"):

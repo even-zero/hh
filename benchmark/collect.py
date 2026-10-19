@@ -254,9 +254,15 @@ def collect(cfg: dict) -> dict:
                 "hang_identified": (open_.get("open_intervals") or [None])[0]}
     out["facts"] = facts
     v, head = hh_version()
+    try:
+        repos_file = os.path.relpath(cfg.get("_path", os.path.join(config.HERE, "repos.json")),
+                                     config.REPO_ROOT)
+    except ValueError:
+        repos_file = str(cfg.get("_path", "benchmark/repos.json"))
     out["meta"] = {"date": time.strftime("%Y-%m-%d"), "hh_version": v.replace("hh ", ""),
                    "hh_commit": head, "python": platform.python_version(),
                    "platform": platform.platform(), "cores": os.cpu_count(),
+                   "repos_file": repos_file,
                    "repos": {r["id"]: f"{r['clone']['url']}@{r['clone'].get('ref', 'HEAD')[:10]}"
                              for r in cfg["repos_active"]}}
     os.makedirs(config.RESULTS_DIR, exist_ok=True)

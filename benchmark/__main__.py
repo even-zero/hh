@@ -20,16 +20,19 @@ def main(argv=None) -> int:
                    help="only this scenario (repeatable): probe, clean, workers, resume, hang")
     p.add_argument("--baseline", default=compare_mod.DEFAULT_BASELINE,
                    help="compare: baseline results.json")
+    p.add_argument("--repos-file", default=None,
+                   help="alternate repo descriptor JSON (default: benchmark/repos.json); "
+                        "use e.g. benchmark/repos.fresh.json for a different repo set")
     args = p.parse_args(argv)
 
     try:
-        cfg = config.load()
+        cfg = config.load(args.repos_file)
     except config.ConfigError as e:
         print(f"config error: {e}", file=sys.stderr)
         return 2
 
     if args.cmd == "list":
-        print(f"config: benchmark/repos.json   work dir: benchmark/_work/\n")
+        print(f"config: {args.repos_file or 'benchmark/repos.json'}   work dir: benchmark/_work/\n")
         for r in cfg["repos_active"]:
             raw_stars = r.get("stars")
             star = f"{raw_stars/1000:.1f}k★" if isinstance(raw_stars, (int, float)) else str(raw_stars or "")

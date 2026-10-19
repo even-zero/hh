@@ -449,7 +449,7 @@ th{{color:#dbe4f0;background:#141c2b}}
 </style></head><body><div class="wrap">
 <h1>hh — real-world benchmark</h1>
 <p class="sub">{E(meta.get('date',''))} · hh {E(meta.get('hh_version','?'))} ({E(meta.get('hh_commit',''))}) ·
-Python {E(meta.get('python',''))} · measured by <code>python3 -m benchmark</code> — config: <code>benchmark/repos.json</code></p>
+Python {E(meta.get('python',''))} · measured by <code>python3 -m benchmark</code> — config: <code>{E(meta.get('repos_file','benchmark/repos.json'))}</code></p>
 <div class="kpis">{''.join(kpis)}</div>
 {core}
 <h2>Ledger / attempt logs</h2>{legs}

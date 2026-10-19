@@ -1,0 +1,322 @@
+{
+  "schema": 1,
+  "comment": "Fresh-repo benchmark set (2026-10-19). Different repositories from benchmark/repos.json, pinned to exact commits. Run with: python3 -m benchmark --repos-file benchmark/repos.fresh.json all The set deliberately covers one repo per lane: unittest_exec (markdown), pytest_exec (click), mocha_exec (express), capture/pytest_plugin (werkzeug, urllib3).",
+  "defaults": {
+    "naive_ladder_s": [
+      30,
+      60,
+      120
+    ],
+    "give_up_attempts": 3,
+    "resume": {
+      "kill_at": "auto:0.5",
+      "rerun_budget_s": 120
+    },
+    "measure_one_at_a_time": true
+  },
+  "repos": [
+    {
+      "id": "markdown",
+      "display": "python-markdown",
+      "stars": "3.9k",
+      "clone": {
+        "url": "https://github.com/python-markdown/markdown.git",
+        "ref": "934c53e43774af0a24c566f4b484e4f46d2d2f0d",
+        "depth": null
+      },
+      "lane": "unittest_exec",
+      "pythonpath": [
+        "."
+      ],
+      "setup": [
+        [
+          "python3",
+          "-m",
+          "pip",
+          "install",
+          "--quiet",
+          "--disable-pip-version-check",
+          "--break-system-packages",
+          "-e",
+          "."
+        ],
+        [
+          "python3",
+          "-m",
+          "pip",
+          "install",
+          "--quiet",
+          "--disable-pip-version-check",
+          "--break-system-packages",
+          "pyyaml",
+          "pytest"
+        ]
+      ],
+      "suite_cmd": [
+        "python3",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        "tests",
+        "-p",
+        "test_*.py"
+      ],
+      "runner": "unittest",
+      "scenarios": {
+        "probe": {
+          "root": "."
+        },
+        "clean": true,
+        "workers": [
+          1,
+          2
+        ]
+      },
+      "n_tests_expected": 1129,
+      "notes": "Native unittest discovery (no shim). Editable install is required because extension tests resolve markdown.extensions.* through installed entry points. 1,129 tests, 110 skips, ~0.7 s. Resume is omitted: the suite finishes in <2 s, below the scenario's minimum kill point."
+    },
+    {
+      "id": "click",
+      "display": "click",
+      "stars": "16k",
+      "clone": {
+        "url": "https://github.com/pallets/click.git",
+        "ref": "2247b35ea1c47c727d7a06e51fa280e12a863ff6",
+        "depth": null
+      },
+      "lane": "pytest_exec",
+      "pythonpath": [
+        "src"
+      ],
+      "setup": [
+        [
+          "python3",
+          "-m",
+          "pip",
+          "install",
+          "--quiet",
+          "--disable-pip-version-check",
+          "--break-system-packages",
+          "-e",
+          ".",
+          "pytest"
+        ]
+      ],
+      "suite_cmd": [
+        "python3",
+        "-m",
+        "pytest",
+        "tests",
+        "-q",
+        "-p",
+        "no:cacheprovider"
+      ],
+      "runner": "pytest",
+      "scenarios": {
+        "probe": {
+          "root": "."
+        },
+        "clean": true,
+        "workers": [
+          1,
+          2
+        ],
+        "resume": true
+      },
+      "n_tests_expected": 2287,
+      "notes": "pytest addopts `-m 'not stress'` deselects 31,000 stress parametrizations. Plan and run respect the repo config, so the measured universe is 2,287 (2,262 passed + 24 skipped + 1 xfail), but collection alone costs ~2.4 s \u2014 the warm shard budget can underbudget against runner startup."
+    },
+    {
+      "id": "express",
+      "display": "express",
+      "stars": "65k",
+      "clone": {
+        "url": "https://github.com/expressjs/express.git",
+        "ref": "0dee2c52c7c873498f8ed7d8ee4ddd0a04d3ada8",
+        "depth": null
+      },
+      "lane": "mocha_exec",
+      "pythonpath": [],
+      "setup": [
+        [
+          "npm",
+          "install",
+          "--no-save",
+          "--no-audit",
+          "--no-fund"
+        ]
+      ],
+      "suite_cmd": [
+        "./node_modules/.bin/mocha",
+        "--require",
+        "test/support/env",
+        "--reporter",
+        "dot",
+        "test/"
+      ],
+      "runner": "node",
+      "scenarios": {
+        "probe": {
+          "root": ".",
+          "runner_override": "node"
+        },
+        "clean": true,
+        "workers": [
+          1,
+          2
+        ],
+        "resume": true
+      },
+      "n_tests_expected": 1153,
+      "notes": "Official `npm test` also passes test/acceptance/ (108 tests). It is excluded from both arms because hh's Mocha adapter follows Mocha's default non-recursive test/* tree; including it would give the arms different universes. This is a discovery gap, reported separately. Core suite: 1,153 tests, ~3-4 s."
+    },
+    {
+      "id": "werkzeug",
+      "display": "werkzeug",
+      "stars": "6.7k",
+      "clone": {
+        "url": "https://github.com/pallets/werkzeug.git",
+        "ref": "665e760ca6325a348ce03e5cf780b17e4be01848",
+        "depth": null
+      },
+      "lane": "capture",
+      "capture_kind": "pytest_plugin",
+      "pythonpath": [
+        "src"
+      ],
+      "setup": [
+        [
+          "python3",
+          "-m",
+          "pip",
+          "install",
+          "--quiet",
+          "--disable-pip-version-check",
+          "--break-system-packages",
+          "markupsafe",
+          "ephemeral_port_reserve",
+          "pytest",
+          "pytest-timeout"
+        ]
+      ],
+      "suite_cmd": [
+        "python3",
+        "-m",
+        "pytest",
+        "tests",
+        "-q",
+        "-p",
+        "no:cacheprovider",
+        "-m",
+        "not dev_server"
+      ],
+      "runner": "pytest",
+      "scenarios": {
+        "probe": {
+          "root": "."
+        },
+        "clean": true,
+        "hang": {
+          "variant": "copy",
+          "dest": "werkzeug_hang",
+          "naive_attempts": [
+            30,
+            60
+          ],
+          "capture_attempts": [
+            {
+              "budget": 30,
+              "deselect": null
+            },
+            {
+              "budget": 60,
+              "deselect": null
+            },
+            {
+              "budget": 120,
+              "deselect": "not never_finishes"
+            }
+          ],
+          "inject": [
+            {
+              "path": "tests/test_zzhang.py",
+              "code_key": "pytest_while_true"
+            }
+          ]
+        }
+      },
+      "n_tests_expected": 994,
+      "notes": "`-m 'not dev_server'` (25 deselected) is required: the full suite blocks indefinitely in this sandbox. 994 terminal ledger rows = 992 passed + 2 skipped. Installed non-editable (markupsafe + test deps) and imports the repo via PYTHONPATH=src: an editable install of this repo would shadow the released Werkzeug that quart/flask need in the urllib3 capture environment. Capture-lane injected-hang scenario names the culprit from the open interval, then descopes and runs green."
+    },
+    {
+      "id": "urllib3",
+      "display": "urllib3",
+      "stars": "3.9k",
+      "clone": {
+        "url": "https://github.com/urllib3/urllib3.git",
+        "ref": "a37bc93b65d6bcf00d3dc43d966bab6bd130ecd8",
+        "depth": null
+      },
+      "lane": "capture",
+      "capture_kind": "pytest_plugin",
+      "pythonpath": [
+        "src"
+      ],
+      "setup": [
+        [
+          "python3",
+          "-m",
+          "pip",
+          "install",
+          "--quiet",
+          "--disable-pip-version-check",
+          "--break-system-packages",
+          "-e",
+          "."
+        ],
+        [
+          "python3",
+          "-m",
+          "pip",
+          "install",
+          "--quiet",
+          "--disable-pip-version-check",
+          "--break-system-packages",
+          "anyio[trio]",
+          "h2",
+          "httpx",
+          "hypercorn",
+          "pysocks",
+          "pytest",
+          "pytest-socket",
+          "pytest-timeout",
+          "quart",
+          "quart-trio",
+          "trio",
+          "trustme",
+          "backports.zstd"
+        ]
+      ],
+      "suite_cmd": [
+        "python3",
+        "-m",
+        "pytest",
+        "test",
+        "-q",
+        "-p",
+        "no:cacheprovider",
+        "--ignore=test/with_dummyserver"
+      ],
+      "runner": "pytest",
+      "scenarios": {
+        "probe": {
+          "root": "."
+        },
+        "clean": true
+      },
+      "n_tests_expected": 2048,
+      "notes": "`--ignore=test/with_dummyserver` in both arms (52 TLS/proxy failures in this sandbox). 2,048 terminal ledger rows; probe plans the full 2,808-test tree. Capture overhead is measured on a ~10 s suite."
+    }
+  ]
+}
