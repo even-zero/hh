@@ -54,20 +54,26 @@ def _append(ledger: str, row: dict) -> None:
         f.flush()
 
 
-def _mark_victim_censored(ledger: str, remaining: list[dict], kill_ts: float) -> bool:
-    """The in-flight test (unmatched start row) is right-censored at the kill."""
+def _mark_victim_censored(ledger: str, remaining: list[dict], kill_ts: float) -> float | None:
+    """The in-flight test (unmatched start row) is right-censored at the kill.
+
+    Returns how long that test had been running (s), or None when no victim was
+    found. The duration is the *escaped* wait baseline: it is what the tool
+    stopped paying at the cutoff.
+    """
     starts = _open_starts(ledger)
     for t in remaining:
         s = starts.get(t["key"])
         if s:
+            dur_ms = round((kill_ts - s["ts"]) * 1000.0, 3)
             _append(ledger, {
                 "type": "end", "key": t["key"], "raw_id": t["raw_id"],
                 "status": "timeout", "censored": True,
-                "duration_ms": round((kill_ts - s["ts"]) * 1000.0, 3),
+                "duration_ms": dur_ms,
                 "ts": time.time(),
             })
-            return True
-    return False
+            return dur_ms / 1000.0
+    return None
 
 
 def _cmd(adapter: str, root: str, ledger: str, tests_file: str) -> list[str]:
@@ -102,6 +108,34 @@ def _run(cmd: list[str], timeout: float, env: dict) -> tuple[bool, float, str]:
     return p.returncode == 0, time.perf_counter() - t0, (out + err)[-2000:]
 
 
+def _first_row_ts(ledger: str, offset: int) -> float | None:
+    """Timestamp of the first ledger row written after byte `offset`."""
+    try:
+        with open(ledger, "r", encoding="utf-8") as f:
+            f.seek(offset)
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    row = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                ts = row.get("ts")
+                if isinstance(ts, (int, float)):
+                    return float(ts)
+    except OSError:
+        return None
+    return None
+
+
+def _size(path: str) -> int:
+    try:
+        return os.path.getsize(path)
+    except OSError:
+        return 0
+
+
 def _done_map(ledger: str) -> dict:
     """key -> duration_ms for every end-row in the ledger (incl. resumed work)."""
     m: dict[str, float] = {}
@@ -129,12 +163,19 @@ def execute(plan: dict, root: str, adapter: str = "hh.adapters.unittest_stream",
     env["PYTHONPATH"] = root + os.pathsep + env.get("PYTHONPATH", "")
     cutoff_default = float(plan.get("per_test_cutoff_s", 12.0))
     hang_cutoff = float(plan.get("hang_cutoff_s", 2.0))
+    # Collection/startup is paid per runner process, not by the tests. Shard
+    # budgets are execution budgets, so every attempt's clock gets startup added
+    # on top and the ladder never charges collection to the test budget.
+    startup_s = float(plan.get("startup_s", 0.0) or 0.0)
 
     stats = {"attempts": 0, "wall_s": 0.0, "compute_s": 0.0,
-             "censored": 0, "shard_failures": 0,
+             "censored": 0, "shard_failures": 0, "errors": [],
              # time-saved instrument (hh/savings.py)
              "resumed": 0, "resumed_ms": 0.0,
-             "preserved_tests": 0, "preserved_ms": 0.0}
+             "preserved_tests": 0, "preserved_ms": 0.0,
+             # accounting: runner startup (collection) vs test execution
+             "startup_s": 0.0, "startup_attempts": 0,
+             "censored_wait_s": 0.0}
     import threading
     lock = threading.Lock()
 
@@ -157,18 +198,30 @@ def execute(plan: dict, root: str, adapter: str = "hh.adapters.unittest_stream",
         ext = 0
         while tests:
             bump("attempts")
+            # budget is exec-only; the runner also pays startup/collection
+            off = _size(ledger)
+            t0 = time.time()
             ok, wall, out = _run(
                 _cmd(adapter, root, ledger, _selection_file(plan["checkpoint_dir"], si, tests)),
-                budget, env,
+                budget + startup_s, env,
             )
             bump("wall_s", wall)
             bump("compute_s", wall)
+            # Measure the runner's real startup/collection: it is the gap
+            # between process start and the first test's ledger row. Reusing the
+            # plan's constant charged a full-suite collection to a 40-row
+            # sample that never collected the suite (and inflated exec time).
+            first_ts = _first_row_ts(ledger, off)
+            startup_meas = 0.0 if first_ts is None else min(max(0.0, first_ts - t0), wall)
+            if startup_meas:
+                bump("startup_s", startup_meas)
+                bump("startup_attempts")
             done = _done_keys(ledger)
             rem = [t for t in tests if t["key"] not in done]
             if not rem:
                 log(f"  shard {si}: {len(tests)} tests done in {wall:.1f}s")
                 break
-            if not ok and wall < budget * 0.999:
+            if not ok and wall < (budget + startup_meas) * 0.999:
                 # process exited early (crash/import error): record remainder as errors
                 for t in rem:
                     _append(ledger, {
@@ -177,12 +230,19 @@ def execute(plan: dict, root: str, adapter: str = "hh.adapters.unittest_stream",
                         "duration_ms": 0.0, "ts": time.time(),
                     })
                 bump("shard_failures")
-                log(f"  shard {si}: adapter exited early, {len(rem)} marked error")
+                tail = (out or "").strip().splitlines()[-6:]
+                with lock:
+                    stats["errors"].append({"shard": si, "wall_s": round(wall, 3),
+                                            "log": tail})
+                log(f"  shard {si}: adapter exited early, {len(rem)} marked error: "
+                    + (tail[-1] if tail else "no output"))
                 break
             # timed out mid-shard: censor the in-flight test
             kill_ts = time.time()
-            if _mark_victim_censored(ledger, rem, kill_ts):
+            victim_wait = _mark_victim_censored(ledger, rem, kill_ts)
+            if victim_wait is not None:
                 bump("censored")
+                bump("censored_wait_s", victim_wait)
             done = _done_keys(ledger)
             rem = [t for t in rem if t["key"] not in done]
             if not rem:
@@ -206,7 +266,7 @@ def execute(plan: dict, root: str, adapter: str = "hh.adapters.unittest_stream",
                 ext = 1
                 log(f"    escalate: extend budget → {budget:.1f}s, resume")
             elif ext == 1:
-                rate = max(wall / max(len(tests) - len(rem), 1), 0.001)
+                rate = max((wall - startup_meas) / max(len(tests) - len(rem), 1), 0.001)
                 budget = min(rate * len(rem) * 1.4 + 2.0, 600.0)
                 ext = 2
                 log(f"    escalate: adaptive re-budget → {budget:.1f}s")
@@ -215,10 +275,19 @@ def execute(plan: dict, root: str, adapter: str = "hh.adapters.unittest_stream",
                 for t in rem:
                     bump("attempts")
                     q_budget = hang_cutoff if t.get("hang_tier", 0) >= 2 else cutoff_default
+                    off2 = _size(ledger)
+                    t2 = time.time()
                     ok2, wall2, _ = _run(
-                        _cmd(adapter, root, ledger, _selection_file(plan["checkpoint_dir"], si, [t])), q_budget, env)
+                        _cmd(adapter, root, ledger, _selection_file(plan["checkpoint_dir"], si, [t])),
+                        q_budget + startup_s, env)
                     bump("wall_s", wall2)
                     bump("compute_s", wall2)
+                    f2 = _first_row_ts(ledger, off2)
+                    st2 = 0.0 if f2 is None else min(max(0.0, f2 - t2), wall2)
+                    if st2:
+                        bump("startup_s", st2)
+                        bump("startup_attempts")
+                    bump("censored_wait_s", max(0.0, wall2 - st2))
                     if t["key"] not in _done_keys(ledger):
                         _append(ledger, {
                             "type": "end", "key": t["key"], "raw_id": t["raw_id"],

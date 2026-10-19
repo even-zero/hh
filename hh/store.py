@@ -33,6 +33,7 @@ CREATE INDEX IF NOT EXISTS obs_file ON observations(file_path);
 CREATE TABLE IF NOT EXISTS aggregates (
   level TEXT NOT NULL, level_key TEXT NOT NULL,
   n INTEGER, n_censored INTEGER, p50 REAL, p90 REAL, mean_ewma REAL, mad REAL,
+  mean REAL,
   updated_at REAL, PRIMARY KEY (level, level_key)
 );
 CREATE TABLE IF NOT EXISTS savings (
@@ -61,6 +62,11 @@ class Store:
         self.path = os.path.join(self.root, "observations.sqlite")
         self.db = sqlite3.connect(self.path)
         self.db.executescript(SCHEMA)
+        # migration: stores created before `mean` existed (aggregates are
+        # rebuildable, so an added column plus a refresh is enough)
+        cols = {r[1] for r in self.db.execute("PRAGMA table_info(aggregates)")}
+        if "mean" not in cols:
+            self.db.execute("ALTER TABLE aggregates ADD COLUMN mean REAL")
         self.db.commit()
 
     # -- runs / contexts -------------------------------------------------
@@ -177,21 +183,26 @@ class Store:
             ewma = 0.3 * v + 0.7 * ewma
         med = p50
         mad = sorted(abs(v - med) for v in durs)[n // 2]
+        # arithmetic mean: the *mass* estimator. The median is robust but for
+        # heavy-tailed suites (a few 1-2 s CLI tests among thousands of 1 ms
+        # ones) summing medians under-predicts the suite's true duration. The
+        # mean is what "total test mass" actually means.
+        mean = sum(durs) / n
         self.db.execute(
             "INSERT OR REPLACE INTO aggregates(level, level_key, n, n_censored,"
-            " p50, p90, mean_ewma, mad, updated_at) VALUES (?,?,?,?,?,?,?,?,?)",
-            (level, key, n, sum(1 for _, c in vals if c), p50, p90, ewma, mad, now),
+            " p50, p90, mean_ewma, mad, mean, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?)",
+            (level, key, n, sum(1 for _, c in vals if c), p50, p90, ewma, mad, mean, now),
         )
 
     # -- lookups ---------------------------------------------------------
     def agg_map(self, level: str) -> dict[str, dict]:
         out = {}
-        for key, n, nc, p50, p90, ewma, mad in self.db.execute(
-            "SELECT level_key, n, n_censored, p50, p90, mean_ewma, mad"
+        for key, n, nc, p50, p90, ewma, mad, mean in self.db.execute(
+            "SELECT level_key, n, n_censored, p50, p90, mean_ewma, mad, mean"
             " FROM aggregates WHERE level=?", (level,)
         ):
             out[key] = {"n": n, "n_censored": nc, "p50": p50, "p90": p90,
-                        "mean_ewma": ewma, "mad": mad}
+                        "mean_ewma": ewma, "mad": mad, "mean": mean}
         return out
 
     def censored_keys(self, min_count: int = 2) -> list[str]:

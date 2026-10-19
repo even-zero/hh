@@ -353,7 +353,7 @@ def e7():
     SYN = os.path.join(FIX, "synth_a_41")
 
     def est_of(root):
-        keys, _ = collect_manifest(root, "unittest", Meter())
+        keys, _, _ = collect_manifest(root, "unittest", Meter())
         return est_mod.estimate(keys, store_mod.Store(ROOT), runner="unittest",
                                 workers=2)
 

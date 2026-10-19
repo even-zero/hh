@@ -22,6 +22,46 @@ from . import config, harness, shims
 HH = ["python3", "-m", "hh"]
 
 
+def collection_cmd(repo: dict, *, arm: str = "naive") -> list[str] | None:
+    """The same suite invocation with execution disabled — collection cost only.
+
+    The benchmark measures *execution*: pytest collection (and Mocha's file
+    loading) is timed separately so a slow collection can never be reported as
+    test overhead. `arm="hh"` adds the capture plugin to the probe, so the
+    plugin's own collection cost is charged to the hh arm, not hidden.
+    """
+    base = repo_cmd_subst(repo["suite_cmd"], repo)
+    if repo["runner"] == "pytest":
+        cmd = [c for c in base if c not in ("-q", "--quiet")]
+        cmd += ["--collect-only", "-q"]
+        if arm == "hh" and repo["lane"] == "capture":
+            cmd += ["-p", "hh.adapters.pytest_plugin"]
+        return cmd
+    if repo["runner"] == "node":
+        return base + ["--dry-run"]
+    if repo["runner"] == "unittest":
+        # discovery still imports every test module; -k matches nothing so the
+        # probe pays exactly the import/discovery cost and runs no test
+        return base + ["-k", "__hh_collection_probe_no_match__"]
+    return None
+
+
+def measure_collection(repo: dict, *, arm: str = "naive", budget_s: float = 600) -> float | None:
+    """Time the collection phase alone and record it (execution time excludes it)."""
+    cmd = collection_cmd(repo, arm=arm)
+    if not cmd:
+        return None            # unittest: discovery is in-process and negligible
+    env = config.env_for(repo, extra={"HH_LEDGER": os.devnull}
+                         if arm == "hh" else None)
+    parsed, wall, _ = harness.run_and_save(
+        cmd, cwd=config.repo_dir(repo), env=env, repo=repo["id"],
+        scenario="clean", arm=arm, attempt=1, kind="collection-probe",
+        budget_s=budget_s, log_name=f"collection_{arm}.log")
+    harness.now_record(repo=repo["id"], scenario="clean", arm=arm, attempt=1,
+                       kind="collection-result", collection_s=round(wall, 3))
+    return wall
+
+
 def repo_cmd_subst(cmd: list[str], repo: dict, **subs) -> list[str]:
     out = []
     mapping = {
@@ -58,7 +98,7 @@ def scenario_probe(repo: dict) -> dict:
                          scenario="probe", arm="hh", attempt=1, kind="plan-probe",
                          budget_s=180, log_name=f"{repo['id']}_probe_stdout.log")
     d = json.load(open(plan_path))
-    discovered = sum(len(s["tests"]) for s in d["shards"])
+    discovered = d.get("manifest_size") or sum(len(s["tests"]) for s in d["shards"])
     harness.now_record(repo=repo["id"], scenario="probe", arm="hh", attempt=1,
                        kind="probe-result", runner=runner, root=root,
                        discovered=discovered, operating_level=d["operating_level"],
@@ -91,6 +131,8 @@ def scenario_clean(repo: dict, defaults: dict) -> None:
                      scenario="clean", arm="naive", attempt=99,
                      policy="naive-reference", store_root=store_n,
                      log_name="clean_reference.log")
+    # collection is not execution: time it separately for the like-for-like diff
+    measure_collection(repo, arm="naive")
     # hh arm
     if repo["lane"].endswith("_exec"):
         _clean_exec(repo)
@@ -119,11 +161,26 @@ def _clean_exec(repo: dict) -> None:
             arm="hh", attempt=1, kind=f"run-{phase}", budget_s=900,
             log_name=f"clean_{phase}_run.log", keep_json=True)
         if run:
+            stats = run.get("stats") or {}
+            if stats.get("shard_failures"):
+                # A dead adapter must fail the benchmark loudly, not produce a
+                # "fast" row: every unexecuted test was force-marked error.
+                harness.now_record(repo=repo["id"], scenario="clean", arm="hh",
+                                   attempt=1, kind=f"run-{phase}-SHARD-FAILED",
+                                   stats=stats)
+                raise RuntimeError(
+                    f"{repo['id']} {phase}: {int(stats['shard_failures'])} shard(s) "
+                    f"failed to start: {stats.get('errors')}")
             harness.now_record(repo=repo["id"], scenario="clean", arm="hh", attempt=1,
                                kind=f"run-{phase}-stats", wall_s=run.get("wall_s"),
+                               exec_wall_s=run.get("exec_wall_s"),
+                               startup_s=run.get("startup_s"),
                                overhead_ms=run.get("overhead_ms"),
+                               phases=run.get("phases"),
+                               predicted_exec_wall_s=run.get("predicted_exec_wall_s"),
                                stats=run.get("stats"), ingested=run.get("ingested"),
-                               receipt=run.get("time_saved", {}).get("this_call_s"))
+                               receipt=run.get("time_saved", {}).get("this_call_s"),
+                               net_s=run.get("time_saved", {}).get("net_s"))
 
 
 def _clean_capture(repo: dict, budget: float) -> None:
@@ -132,6 +189,7 @@ def _clean_capture(repo: dict, budget: float) -> None:
     ledger = os.path.join(config.logdir(repo["id"]), "clean_capture_ledger.jsonl")
     if os.path.exists(ledger):
         os.remove(ledger)
+    measure_collection(repo, arm="hh")
     cmd = _capture_cmd(repo, ledger, None)
     env = config.env_for(repo, extra=_capture_env_extra(ledger))
     rec = harness.kill_run(cmd, budget, cwd=config.repo_dir(repo), env=env,

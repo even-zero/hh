@@ -9,9 +9,11 @@ const fs = require('fs');
 const path = require('path');
 
 const keyOf = (file, fullTitle) => {
-  const rel = (file || 'unknown').replace(/\\/g, '/').replace(/.*\/node_modules\//, '');
-  const stem = rel.replace(/^.*?\/?(?=[^/]+$)/, '').replace(/\.(m|c)?jsx?$/, '');
-  return `mocha::${stem}/${String(fullTitle).replace(/\s+/g, '_')}`;
+  // Keep the path relative to cwd so nested suites with the same stem do not
+  // collide (mirrors adapters/mocha_stream.cjs, the executor's key format).
+  const rel = path.relative(process.cwd(), file || 'unknown')
+    .split(path.sep).join('/').replace(/\.(m|c)?jsx?$/, '');
+  return `mocha::${rel}/${String(fullTitle).replace(/\s+/g, '_')}`;
 };
 
 module.exports = function tdaMochaReporter(runner) {

@@ -136,11 +136,21 @@ def cmd_run(args):
                        log=lambda *a: print(*a, file=sys.stderr))
     print(json.dumps({
         "stats": res["stats"], "ingested": res["ingested"],
-        "wall_s": res["wall_s"], "overhead_ms": res["overhead_ms"],
+        "wall_s": res["wall_s"], "exec_wall_s": res.get("exec_wall_s"),
+        "startup_s": res.get("startup_s"), "phases": res.get("phases"),
+        "overhead_ms": res["overhead_ms"],
+        "predicted_exec_wall_s": (res.get("plan_used") or {}).get("predicted_exec_wall_s"),
         "time_saved": savings.block(args.store_root, None,
                                     res["savings"]["lines"],
-                                    res["savings"]["notes"], res["wall_s"]),
+                                    res["savings"]["notes"], res["wall_s"],
+                                    overhead_s=res["overhead_ms"] / 1000.0),
     }))
+    if res["stats"].get("shard_failures"):
+        # never exit 0 when an adapter died before running its tests
+        for e in res["stats"].get("errors", []):
+            print(f"hh: shard {e['shard']} failed: {e['log'][-1] if e['log'] else ''}",
+                  file=sys.stderr)
+        return 3
     return 0
 
 

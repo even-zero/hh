@@ -61,7 +61,18 @@ def main(argv=None):
             selected = {entry["raw_id"]: entry["key"] for line in f
                         for entry in [json.loads(line)]}
         os.environ["HH_KEYS_FILE"] = args.tests_file
-    rc = pytest.main(opts + ["tests" if os.path.isdir("tests") else "."], plugins=[Selection(args.collect_out, selected)])
+    # Recursive discovery over every conventional test root that exists. A repo
+    # with both tests/ and test/ (or nested suites) must not lose a tree just
+    # because one directory name was checked first.
+    roots = [d for d in ("tests", "test") if os.path.isdir(d)] or ["."]
+    if selected is not None and len(selected) <= 400:
+        # Small selection (a cold sample, a hang probe, a resume tail): pass the
+        # node ids directly so pytest never imports/collects the rest of the
+        # suite. Deselect-after-collect pays the whole collection cost — 2.9 s
+        # of a 4.6 s click suite — for 40 tests that take 40 ms.
+        rc = pytest.main(opts + list(selected), plugins=[])
+        return int(rc)
+    rc = pytest.main(opts + roots, plugins=[Selection(args.collect_out, selected)])
     return int(rc)
 
 

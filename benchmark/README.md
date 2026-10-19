@@ -22,6 +22,10 @@ e.g. the fresh 2026-10-19 repo set:
 python3 -m benchmark --repos-file benchmark/repos.fresh.json all
 ```
 
+The fix round that followed is documented in
+`REPORT-2026-10-20-fixes.md` (same five repos, same scenarios; cold-start
+sampling, recursive discovery, collection-excluded timing and net receipts).
+
 `repos.fresh.json` is a self-contained five-repo set (markdown, click, express,
 werkzeug, urllib3) used for the cross-repo comparison report
 `REPORT-2026-10-19-fresh-repos.md`; the committed `repos.json` and frozen

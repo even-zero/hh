@@ -1,5 +1,10 @@
 # Fresh-repo benchmark rerun — 2026-10-19
 
+> **Superseded (numbers) — kept as the baseline this round fixed.** The
+> findings below were addressed in [`REPORT-2026-10-20-fixes.md`](REPORT-2026-10-20-fixes.md):
+> click +124.6% → +9.9%, express +13.9% → +4.4%, markdown +21.7% → +16.9%,
+> Express discovery 1,153 → 1,261, and separate collection accounting.
+
 **Verdict: no marked improvement over the existing report.** Five repositories
 that are *not* in `benchmark/repos.json` reproduce the same profile: full
 discovery for flat suites, small-suite overhead far above the 2% gate, resume

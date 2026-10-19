@@ -15,16 +15,25 @@ this, and here is the row that proves it":
                 zero (ledger rows + stats prove the mass).
   resume        tests already on the job's ledger from an earlier call were
                 not re-executed (they were paid for once, in this job).
-  hang_bound    a hang was censored at the 2–12 s cutoff. The *unbounded*
-                naive wait is NOT summed; when the caller supplied a deadline,
-                we credit at most (deadline − wall), i.e. the most the
-                blocking baseline could have burned.
+  hang_bound    a hang was censored at the cutoff. The *unbounded* naive wait
+                is NOT summed; when the caller supplied a deadline, we credit
+                at most (deadline − wall), i.e. the most the blocking baseline
+                could have burned.
+  hang_escape   no caller deadline: still credit the *escaped* wait — the time
+                each censored test would have consumed before any completion-
+                based runner gives up, minus what the tool actually waited
+                (capped at the per-test cutoff). This is a measured lower
+                bound, not the unbounded wait.
   refusal       `budget_too_small` / `deadline_infeasible` returns: the run
                 could not finish in the caller's deadline, and a naive attempt
                 would have burned that deadline and produced nothing.
 
 Nothing else is credited. In particular, a fast run with nothing at risk earns
 a receipt of 0 — "no savings to claim" is a valid, honest receipt.
+
+Every receipt also reports what the call *cost* (`overhead_s`: planning,
+ingestion, calibration sampling) and the resulting `net_s`, so a receipt can
+never be read as pure profit when the tool's own work is larger.
 """
 from __future__ import annotations
 
@@ -32,7 +41,7 @@ import json
 import os
 import time
 
-KINDS = ("continuation", "resume", "hang_bound", "refusal")
+KINDS = ("continuation", "resume", "hang_bound", "hang_escape", "refusal")
 
 
 def job_id() -> str:
@@ -40,8 +49,13 @@ def job_id() -> str:
 
 
 def credit_lines(stats: dict, wall_s: float, caller_limit_s: float | None,
-                 censored: int) -> tuple[list[dict], list[str]]:
-    """Executor stats + caller limit → (credited lines, honest notes)."""
+                 censored: int, censored_wait_s: float = 0.0,
+                 cutoff_s: float = 12.0) -> tuple[list[dict], list[str]]:
+    """Executor stats + caller limit → (credited lines, honest notes).
+
+    `censored_wait_s` is the measured time actually spent on the censored
+    tests; `cutoff_s` is the per-test cutoff. Their difference is the escape.
+    """
     lines: list[dict] = []
     notes: list[str] = []
 
@@ -72,9 +86,24 @@ def credit_lines(stats: dict, wall_s: float, caller_limit_s: float | None,
                           f"and returned nothing"),
             })
         else:
+            # No caller deadline: credit the measured escape, bounded by the
+            # per-test cutoff the tool itself would have paid.
+            escape_ms = max(0.0, censored * cutoff_s * 1000.0
+                            - max(0.0, censored_wait_s) * 1000.0)
+            if escape_ms > 0:
+                lines.append({
+                    "kind": "hang_escape",
+                    "ms": round(escape_ms, 1),
+                    "basis": (f"{censored} test(s) censored at the {cutoff_s:g}s "
+                              f"cutoff after {censored_wait_s:.1f}s of measured wait; "
+                              f"a completion-waiting runner spends at least the "
+                              f"cutoff on each, and returns nothing for them — "
+                              f"this is the escaped lower bound, not the unbounded "
+                              f"wait"),
+                })
             notes.append(f"{censored} test(s) censored (hang, or in-flight at a "
-                         f"budget cut) — avoided wait is UNBOUNDED without a caller "
-                         f"deadline, so nothing is credited")
+                         f"budget cut) — the escape above is a lower bound; the "
+                         f"true avoided wait is UNBOUNDED without a caller deadline")
     return lines, notes
 
 
@@ -133,8 +162,13 @@ def totals(store_root: str, job: str | None = None) -> dict:
 
 
 def block(store_root: str, job: str | None, lines: list[dict], notes: list[str],
-          wall_s: float | None = None) -> dict:
-    """The `time_saved` block that ships in every tool/CLI response."""
+          wall_s: float | None = None, overhead_s: float | None = None) -> dict:
+    """The `time_saved` block that ships in every tool/CLI response.
+
+    `net_s` = credited work − the tool's own measured overhead for this call
+    (planning, ingest, calibration sampling). A receipt is never presented as
+    gross-only: the caller always sees what the tool spent to earn it.
+    """
     job = job or job_id()
     tot = totals(store_root, job)
     this_call = round(sum(l["ms"] for l in lines), 1)
@@ -149,8 +183,13 @@ def block(store_root: str, job: str | None, lines: list[dict], notes: list[str],
         "breakdown": lines,
         "how": ("conservative: only work a restart-from-zero baseline provably "
                 "re-pays is credited (ledger-backed); unbounded waits are noted, "
-                "not summed — see TIME_SAVED.md"),
+                "not summed; net = credited − tool overhead — see TIME_SAVED.md"),
     }
+    if overhead_s is not None:
+        out["overhead_ms"] = round(overhead_s * 1000.0, 1)
+        out["overhead_s"] = round(overhead_s, 3)
+        out["net_ms"] = round(this_call - overhead_s * 1000.0, 1)
+        out["net_s"] = round((this_call - overhead_s * 1000.0) / 1000.0, 1)
     if wall_s is not None:
         out["this_call_wall_s"] = round(wall_s, 3)
     if notes:

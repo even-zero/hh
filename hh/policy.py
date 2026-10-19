@@ -32,6 +32,14 @@ class ExecutionPlan:
     operating_level: str = "full"
     overhead_ms: float = 0.0
     predicted_wall_s: float = 0.0        # LPT point estimate of wall (max shard load)
+    # collection/startup paid once per shard attempt; budgets are *execution*
+    # budgets, so the executor's clock adds this instead of charging it to tests
+    startup_s: float = 0.0
+    predicted_exec_wall_s: float = 0.0   # max shard load, collection excluded
+    # cold-start protocol: run a small stratified sample first, then re-plan
+    sample_phase: dict | None = None
+    manifest_size: int = 0                # tests discovered (sample plans execute a subset)
+    resume_ingest: dict | None = None     # rows imported from a killed run before planning
     deadline_decision: dict | None = None  # choose_workers() output when a deadline was given
     est: dict = field(default_factory=dict)
 
@@ -135,11 +143,15 @@ def make_plan(est: Estimate, raw_of: dict[str, str], *, workers: int = 2,
               tiny_threshold_ms: float = 1000.0,
               max_budget_s: float = 7200.0,
               deadline_s: float | None = None,
-              max_workers: int | None = None) -> ExecutionPlan:
+              max_workers: int | None = None,
+              startup_s: float = 0.0) -> ExecutionPlan:
     """Build an ExecutionPlan. Operating levels per §8.4 auto-degrade ladder.
 
     With `deadline_s` set, the number of workers is chosen by choose_workers()
     and shards are built for that parallelism (CI-deadline hook, §9).
+
+    `startup_s` is the measured collection/import cost of one runner process;
+    it is added to each shard attempt's clock but never to the tests' budget.
     """
     decision = None
     if deadline_s is not None:
@@ -150,7 +162,7 @@ def make_plan(est: Estimate, raw_of: dict[str, str], *, workers: int = 2,
     # Hard clamps: the budget is a *reservation* — tails beyond it are handled by
     # the escalation ladder and checkpoints, never by absurd reservations
     # (E3b finding: sigma blow-up once reserved 7 days for a 90s suite).
-    mass_s = est.breakdown.get("tests_ms", est.point) / 1000.0
+    mass_s = (est.breakdown.get("tests_ms", est.point) + est.runner_overhead_ms) / 1000.0
     total_s = min(total_s, max_budget_s, mass_s * 6.0 + 30.0)
     # tiny suite ⇒ do not spend on sharding/checkpoints (L2/L3)
     if est.point < tiny_threshold_ms:
@@ -162,7 +174,11 @@ def make_plan(est: Estimate, raw_of: dict[str, str], *, workers: int = 2,
             checkpoint_dir=checkpoint_dir, per_test_cutoff_s=per_test_cutoff_s,
             operating_level="record-only",
             workers_hint=1, workers_rationale="tiny suite: serial, no sharding",
-            predicted_wall_s=round(sum(p.median for p in est.preds) / 1000, 3),
+            predicted_wall_s=round(sum(p.median for p in est.preds) / 1000
+                                   + est.runner_overhead_ms / 1000 + startup_s, 3),
+            startup_s=round(startup_s, 3),
+            predicted_exec_wall_s=round(sum(p.median for p in est.preds) / 1000
+                                        + est.runner_overhead_ms / 1000, 3),
             deadline_decision=decision,
             est=_est_summary(est),
         )
@@ -194,21 +210,66 @@ def make_plan(est: Estimate, raw_of: dict[str, str], *, workers: int = 2,
     norm_loads = [sum(t["pred_ms"] for t in s.tests) for s in shards
                   if not s.quarantine]
     q_loads = [s.budget_s * 1000.0 for s in shards if s.quarantine]
+    exec_wall = max(norm_loads + q_loads + [0.0]) / 1000 + est.runner_overhead_ms / 1000
     plan = ExecutionPlan(
         total_budget_s=round(total_s, 3), shards=shards,
         checkpoint_dir=checkpoint_dir, per_test_cutoff_s=per_test_cutoff_s,
         hang_cutoff_s=hang_cutoff, workers_hint=hint, workers_rationale=rationale,
-        predicted_wall_s=round(max(norm_loads + q_loads + [0.0]) / 1000, 3),
+        predicted_wall_s=round(exec_wall + startup_s, 3),
+        startup_s=round(startup_s, 3),
+        predicted_exec_wall_s=round(exec_wall, 3),
         deadline_decision=decision,
         est=_est_summary(est),
     )
     return plan
 
 
+def make_sample_plan(est: Estimate, keys: list[str], raw_of: dict[str, str], *,
+                     checkpoint_dir: str, per_test_cutoff_s: float = 12.0,
+                     startup_s: float = 0.0, strategy: str = "stratified-file",
+                     iteration: int = 1, budget_cap_s: float = 60.0) -> ExecutionPlan:
+    """Cold-start sample phase: measure a few rows, then re-plan from them.
+
+    The sample is deliberately cheap and bounded: stratified across files so one
+    slow file cannot dominate, budgeted from priors, and hard-capped. Its only
+    job is to turn ``prior`` estimates into ``measured`` ones — the caller runs
+    it, records the ledger, and plans again (the recursive half of the loop).
+    """
+    preds = {p.key: p for p in est.preds}
+    picked = list(dict.fromkeys(k for k in keys if k in preds))[:len(keys)]
+    # keep the deterministic order chosen by the caller (see tool._sample_keys)
+    sample = [{"key": k, "raw_id": raw_of.get(k, k), "pred_ms": preds[k].median}
+              for k in picked]
+    mass_s = sum(t["pred_ms"] for t in sample) / 1000.0
+    budget = max(3.0, min(budget_cap_s, mass_s * 3.0 + 3.0))
+    total = round(mass_s + startup_s, 3)
+    return ExecutionPlan(
+        total_budget_s=round(budget, 3),
+        shards=[Shard(budget_s=round(budget, 3), tests=sample)],
+        checkpoint_dir=checkpoint_dir, per_test_cutoff_s=per_test_cutoff_s,
+        operating_level="sample",
+        workers_hint=1,
+        workers_rationale=(f"cold start: sample {len(sample)}/{est.breakdown.get('n_tests', len(sample))} "
+                           f"tests, then re-plan from measured rows"),
+        predicted_wall_s=total,
+        startup_s=round(startup_s, 3),
+        predicted_exec_wall_s=round(mass_s, 3),
+        sample_phase={"strategy": strategy, "sample_size": len(sample),
+                      "of": est.breakdown.get("n_tests", len(sample)),
+                      "iteration": iteration,
+                      "calibration_before": est.calibration.get("basis"),
+                      "coverage_measured_before": round(est.coverage_measured, 3)},
+        est=_est_summary(est),
+    )
+
+
 def _est_summary(est: Estimate) -> dict:
     return {
         "p50_s": round(est.p50 / 1000, 3), "p90_s": round(est.p90 / 1000, 3),
+        "runner_overhead_ms": est.runner_overhead_ms,
         "p99_s": round(est.p99 / 1000, 3), "coverage": round(est.coverage, 3),
+        "coverage_measured": round(est.coverage_measured, 3),
+        "calibration": est.calibration,
         "n_unknown": len(est.unknowns), "breakdown": est.breakdown,
     }
 

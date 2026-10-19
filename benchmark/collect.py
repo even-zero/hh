@@ -26,7 +26,10 @@ def records() -> list[dict]:
 
 
 def rec_find(recs, repo, kind, scenario=None, attempt=None):
-    for r in recs:
+    # records.jsonl is append-only across runs; the last match is the one this
+    # results set was produced from. Taking the first one silently mixed a
+    # previous run's numbers into a new report.
+    for r in reversed(recs):
         if r.get("repo") != repo or r.get("kind") != kind:
             continue
         if scenario and r.get("scenario") != scenario:
@@ -44,7 +47,13 @@ def est_of(plan_path: str) -> dict | None:
     e = d.get("est", {})
     b = e.get("breakdown", {})
     return {"n": b.get("n_tests"), "coverage": e.get("coverage"),
+            "coverage_measured": e.get("coverage_measured"),
+            "calibration": e.get("calibration"),
+            "manifest": d.get("manifest_size"),
+            "sample": (d.get("sample_phase") or {}).get("sample_size"),
+            "startup_s": d.get("startup_s"),
             "n_unknown": e.get("n_unknown"), "pred_wall_s": d.get("predicted_wall_s"),
+            "pred_exec_wall_s": d.get("predicted_exec_wall_s"),
             "p50_s": e.get("p50_s"), "p90_s": e.get("p90_s"),
             "budget_s": d.get("total_budget_s"),
             "plan_overhead_ms": round(d.get("overhead_ms", 0.0), 1),
@@ -119,14 +128,19 @@ def collect(cfg: dict) -> dict:
     # ---- attempt logs: harness kills + executor hh-full rows ----
     for repo in cfg["repos_active"]:
         rid = repo["id"]
-        rows = []
+        # records.jsonl is append-only across benchmark runs: keep only the
+        # newest row per (policy, attempt, scenario, arm), otherwise a report
+        # mixes an old naive run with a fresh hh run.
+        latest: dict[tuple, dict] = {}
         for r in recs:
             if r.get("repo") == rid and r.get("kind") == "kill_run":
-                rows.append({"policy": r["policy"], "suite_id": r["suite_id"],
+                key = (r["policy"], r["attempt"], r.get("scenario"), r.get("arm"))
+                latest[key] = {"policy": r["policy"], "suite_id": r["suite_id"],
                              "attempt": r["attempt"], "budget_s": r["budget_s"],
                              "outcome": r["outcome"], "wall_ms": r["wall_ms"],
                              "wasted_ms": r["wasted_ms"], "overhead_ms": 0.0,
-                             "scenario": r["scenario"], "arm": r.get("arm")})
+                             "scenario": r["scenario"], "arm": r.get("arm")}
+        rows = list(latest.values())
         for suffix in ("clean-naive", "clean-hh", "resume-naive", "resume-hh",
                        "hang-naive", "hang-cap", "capture", "packaging_hang-capture"):
             st = config.store(rid, suffix)
@@ -149,10 +163,15 @@ def collect(cfg: dict) -> dict:
             st = rec_find(recs, rid, f"run-{phase}-stats")
             if st:
                 blk[f"run_{phase}"] = {"wall_s": st.get("wall_s"),
+                                       "exec_wall_s": st.get("exec_wall_s"),
+                                       "startup_s": st.get("startup_s"),
                                        "overhead_ms": st.get("overhead_ms"),
                                        "attempts": st.get("stats", {}).get("attempts"),
                                        "ingested": st.get("ingested"),
-                                       "receipt_s": st.get("receipt")}
+                                       "phases": st.get("phases"),
+                                       "pred_exec_wall_s": st.get("predicted_exec_wall_s"),
+                                       "receipt_s": st.get("receipt"),
+                                       "net_s": st.get("net_s")}
         # workers
         for w in repo["scenarios"].get("workers", []):
             if w == 1:
@@ -208,6 +227,14 @@ def collect(cfg: dict) -> dict:
     for repo in cfg["repos_active"]:
         rid = repo["id"]
         logs = out["attempt_logs"].get(rid, [])
+        # collection is not execution: subtract the measured collection probe
+        # from each arm before comparing (pytest/Mocha load test files first)
+        coll_naive = next((r.get("collection_s") for r in reversed(recs)
+                           if r.get("repo") == rid and r.get("kind") == "collection-result"
+                           and r.get("arm") == "naive"), None)
+        coll_hh = next((r.get("collection_s") for r in reversed(recs)
+                        if r.get("repo") == rid and r.get("kind") == "collection-result"
+                        and r.get("arm") == "hh"), None)
         if repo["lane"] == "capture":
             plain = next((a for a in logs if a.get("policy") == "naive-default"
                           and a.get("scenario") == "clean" and a["outcome"] == "ok"), None)
@@ -216,10 +243,19 @@ def collect(cfg: dict) -> dict:
             if ca:
                 cap_w = ca.get("wall_s", 0) * 1000
                 n = ca["audit"].get("end", 0)
+                plain_s = (plain_w or 0) / 1000.0
+                plain_exec = plain_s - (coll_naive or 0.0) if plain_w else None
+                cap_exec = cap_w / 1000.0 - (coll_hh or 0.0) if plain_w else None
                 facts["capture_overhead"].append({
                     "repo": rid, "tests": n,
-                    "plain_s": (plain_w or 0) / 1000.0,
-                    "capture_s": cap_w / 1000.0,
+                    "plain_s": plain_s, "capture_s": cap_w / 1000.0,
+                    "collection_naive_s": coll_naive, "collection_hh_s": coll_hh,
+                    "plain_exec_s": None if plain_exec is None else round(plain_exec, 3),
+                    "capture_exec_s": None if cap_exec is None else round(cap_exec, 3),
+                    "overhead_exec_ms": (None if plain_exec is None else
+                                         round((cap_exec - plain_exec) * 1000, 1)),
+                    "overhead_pct_exec": (None if not plain_exec else
+                                          round((cap_exec / plain_exec - 1) * 100, 1)),
                     "overhead_ms": None if not plain_w else round(cap_w - plain_w, 1),
                     "overhead_pct": None if not plain_w else round((cap_w / plain_w - 1) * 100, 1),
                     "ledger_rows": ca["audit"].get("rows")})
@@ -231,14 +267,37 @@ def collect(cfg: dict) -> dict:
             pw = est_of(os.path.join(config.logdir(rid), "clean_warm_plan.json"))
             if plain and rw and pw:
                 hh_tot = rw["wall_s"] + pw["plan_overhead_ms"] / 1000
+                plain_s = plain["wall_ms"] / 1000
+                # subtract the *same* measured collection cost from both arms:
+                # comparing "naive wall − collect-only" against "hh exec-only"
+                # mixed two different startup estimates and made hh look worse
+                # than it is (collect-only prints every node id and costs more
+                # than in-run collection).
+                hh_exec = (rw.get("exec_wall_s") if rw.get("exec_wall_s") is not None
+                           else rw["wall_s"] - (rw.get("startup_s") or 0.0))
                 facts["capture_overhead"].append({
                     "repo": rid, "tests": (est_of(os.path.join(config.logdir(rid), "clean_cold_plan.json")) or {}).get("n"),
-                    "plain_s": plain["wall_ms"] / 1000,
+                    "plain_s": plain_s,
                     "capture_s": round(hh_tot, 3),
-                    "overhead_ms": round((hh_tot - plain["wall_ms"] / 1000) * 1000, 1),
-                    "overhead_pct": round((hh_tot / (plain["wall_ms"] / 1000) - 1) * 100, 2),
+                    # Collection is measured, not guessed: `--collect-only`
+                    # costs more than in-run collection (it materializes and
+                    # prints every node id), so it cannot be subtracted from
+                    # one arm and not the other. Exec lanes therefore report
+                    # the process-level (end-to-end) comparison plus hh's own
+                    # measured exec/startup split; capture lanes below have an
+                    # identical process shape in both arms and do subtract it.
+                    "collection_naive_s": coll_naive,
+                    "hh_startup_s": rw.get("startup_s"),
+                    "hh_exec_s": round(hh_exec, 3),
+                    "hh_plan_ms": pw["plan_overhead_ms"],
+                    "plain_exec_s": None,
+                    "capture_exec_s": None,
+                    "overhead_exec_ms": None,
+                    "overhead_pct_exec": None,
+                    "overhead_ms": round((hh_tot - plain_s) * 1000, 1),
+                    "overhead_pct": round((hh_tot / plain_s - 1) * 100, 2),
                     "self_metered_ms": rw.get("overhead_ms"),
-                    "label": "full executor (plan+run)"})
+                    "label": "full executor (plan+run); exec split measured"})
         # hang capture audits
         audits = [r["audit"] for r in recs
                   if r.get("repo") == rid and r.get("kind") == "capture-ledger-audit"]

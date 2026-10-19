@@ -31,11 +31,33 @@ class TestCreditLines(unittest.TestCase):
         self.assertLessEqual(lines[0]["ms"], 60_000)
         self.assertEqual(notes, [])
 
-    def test_hang_without_caller_deadline_is_noted_not_summed(self):
+    def test_hang_without_caller_deadline_credits_bounded_escape(self):
+        # No deadline: the unbounded wait is never summed, but the *measured*
+        # escape (cutoff − wait actually spent) is credited as a lower bound.
         lines, notes = savings.credit_lines({}, wall_s=8.0, caller_limit_s=None,
-                                            censored=3)
-        self.assertEqual(lines, [])
+                                            censored=3, censored_wait_s=6.0,
+                                            cutoff_s=12.0)
+        self.assertEqual([l["kind"] for l in lines], ["hang_escape"])
+        self.assertEqual(lines[0]["ms"], (3 * 12.0 - 6.0) * 1000.0)
         self.assertTrue(any("UNBOUNDED" in n for n in notes))
+
+    def test_hang_escape_never_negative(self):
+        lines, _ = savings.credit_lines({}, wall_s=8.0, caller_limit_s=None,
+                                        censored=1, censored_wait_s=30.0,
+                                        cutoff_s=12.0)
+        self.assertEqual([l for l in lines if l["kind"] == "hang_escape"], [])
+
+    def test_block_reports_net_of_overhead(self):
+        import tempfile
+        tmp = tempfile.mkdtemp(prefix="h8-net-")
+        try:
+            b = savings.block(tmp, "j", [{"kind": "resume", "ms": 5000.0, "basis": "b"}],
+                              [], wall_s=1.0, overhead_s=0.5)
+            self.assertEqual(b["overhead_s"], 0.5)
+            self.assertEqual(b["net_s"], 4.5)
+        finally:
+            import shutil
+            shutil.rmtree(tmp, ignore_errors=True)
 
     def test_refusal_lines(self):
         lines = savings.refusal_lines("declared bound 35s > caller budget 20s", 20)

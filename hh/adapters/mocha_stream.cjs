@@ -1,4 +1,10 @@
-/** Native Mocha collection and checkpointed execution for local test/*.js trees. */
+/** Native Mocha collection and checkpointed execution for local test trees.
+
+ * Discovery is *recursive* over test/: nested suites (test/acceptance/**,
+ * test/unit/**) are part of the suite and must never be silently dropped. Set
+ * HH_MOCHA_REQUIRE=path/a.js,path/b.js to preload the same require hooks the
+ * repo's own npm test uses (e.g. express's test/support/env).
+ */
 'use strict';
 const fs = require('node:fs');
 const path = require('node:path');
@@ -13,8 +19,11 @@ function files(dir) {
   });
 }
 function baseKey(test) {
-  const stem = path.basename(test.file || 'unknown').replace(/\.(m|c)?jsx?$/, '');
-  return `mocha::${stem}/${test.fullTitle().replace(/\s+/g, '_')}`;
+  // Path relative to the root, so nested suites with the same file stem do not
+  // collide (test/Router.js vs test/acceptance/Router.js).
+  const rel = path.relative(process.cwd(), test.file || 'unknown')
+    .replace(/\.(m|c)?jsx?$/, '').split(path.sep).join('/');
+  return `mocha::${rel}/${test.fullTitle().replace(/\s+/g, '_')}`;
 }
 function tests(suite) {
   return [...suite.tests, ...suite.suites.flatMap(tests)];
@@ -23,12 +32,16 @@ async function main() {
   const [mode, root, ledger, selection] = process.argv.slice(2);
   if (!['collect', 'run'].includes(mode)) throw Error('expected collect or run');
   process.chdir(root);
-  const mochaModule = createRequire(path.join(root, 'package.json'))('mocha');
+  const req = createRequire(path.join(root, 'package.json'));
+  for (const mod of (process.env.HH_MOCHA_REQUIRE || '').split(',').map(s => s.trim()).filter(Boolean)) {
+    req(path.resolve(root, mod));
+  }
+  const mochaModule = req('mocha');
   const Mocha = mochaModule.default || mochaModule.Mocha || mochaModule;
   const mocha = new Mocha({ reporter: 'dot', color: false });
-  // Mocha's default CLI suite is test/* (not recursive).
+  // Recursive discovery: every .js/.cjs/.mjs under test/, at any depth.
   const testDir = path.join(root, 'test');
-  for (const file of files(testDir).filter(f => path.dirname(f) === testDir)) mocha.addFile(file);
+  for (const file of files(testDir)) mocha.addFile(file);
   await mocha.loadFilesAsync();
   const all = tests(mocha.suite);
   const counts = new Map();

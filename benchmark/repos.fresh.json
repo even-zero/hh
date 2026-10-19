@@ -74,7 +74,7 @@
         ]
       },
       "n_tests_expected": 1129,
-      "notes": "Native unittest discovery (no shim). Editable install is required because extension tests resolve markdown.extensions.* through installed entry points. 1,129 tests, 110 skips, ~0.7 s. Resume is omitted: the suite finishes in <2 s, below the scenario's minimum kill point."
+      "notes": "Native recursive unittest discovery (no shim). Editable install is required because extension tests resolve markdown.extensions.* through installed entry points. 1,129 tests, 110 skips, ~0.7 s. Resume omitted: the suite finishes in <2 s, below the scenario's minimum kill point."
     },
     {
       "id": "click",
@@ -125,7 +125,7 @@
         "resume": true
       },
       "n_tests_expected": 2287,
-      "notes": "pytest addopts `-m 'not stress'` deselects 31,000 stress parametrizations. Plan and run respect the repo config, so the measured universe is 2,287 (2,262 passed + 24 skipped + 1 xfail), but collection alone costs ~2.4 s \u2014 the warm shard budget can underbudget against runner startup."
+      "notes": "pytest addopts `-m 'not stress'` deselects 31,000 stress parametrizations; 2,287 tests execute. Collection of ~33k items costs ~2.4 s and is measured separately: shard budgets are execution budgets and the executor adds collection on top instead of charging it to tests."
     },
     {
       "id": "express",
@@ -153,7 +153,8 @@
         "test/support/env",
         "--reporter",
         "dot",
-        "test/"
+        "test/",
+        "test/acceptance/"
       ],
       "runner": "node",
       "scenarios": {
@@ -168,8 +169,11 @@
         ],
         "resume": true
       },
-      "n_tests_expected": 1153,
-      "notes": "Official `npm test` also passes test/acceptance/ (108 tests). It is excluded from both arms because hh's Mocha adapter follows Mocha's default non-recursive test/* tree; including it would give the arms different universes. This is a discovery gap, reported separately. Core suite: 1,153 tests, ~3-4 s."
+      "n_tests_expected": 1261,
+      "notes": "Official suite: test/ plus nested test/acceptance/. hh's Mocha adapter is recursive and preloads the same require hook (HH_MOCHA_REQUIRE), so both arms run the same 1,261-test universe \u2014 the previous 108-test discovery gap is closed. ~4 s suite.",
+      "mocha_require": [
+        "test/support/env"
+      ]
     },
     {
       "id": "werkzeug",
@@ -316,7 +320,7 @@
         "clean": true
       },
       "n_tests_expected": 2048,
-      "notes": "`--ignore=test/with_dummyserver` in both arms (52 TLS/proxy failures in this sandbox). 2,048 terminal ledger rows; probe plans the full 2,808-test tree. Capture overhead is measured on a ~10 s suite."
+      "notes": "`--ignore=test/with_dummyserver` in both arms (52 TLS/proxy failures in this sandbox). 2,048 tests; collection is measured separately from execution."
     }
   ]
 }

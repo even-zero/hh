@@ -22,6 +22,8 @@ METRICS = [
     ("compat.blind_tests", "tests invisible to manifest", -1, "n"),
     ("exec.plain_s", "clean suite wall (naive pass)", 0, "s"),
     ("exec.hh_warm_wall", "hh warm run wall", -1, "s"),
+    ("exec.hh_warm_exec_wall", "hh warm run wall (collection excluded)", -1, "s"),
+    ("exec.exec_overhead_pct", "hh executor overhead, collection excluded", -1, "%"),
     ("exec.hh_warm_overhead_ms", "hh warm self-metered overhead", -1, "ms"),
     ("exec.pred_err_warm_pct", "W1 warm prediction error", -1, "%"),
     ("exec.pred_err_w2_pct", "W2 warm prediction error", -1, "%"),
@@ -33,8 +35,10 @@ METRICS = [
     ("exec.hang_run3_s", "hang scenario: hh steady-state wall", -1, "s"),
     ("exec.hang_receipt_s", "hang continuation receipt", +1, "s"),
     ("cap.*.overhead_pct", "capture overhead @N tests", -1, "%"),
+    ("cap.*.overhead_pct_exec", "capture overhead, collection excluded", -1, "%"),
     ("cap.*.tests", "capture suite size", 0, "n"),
-    ("receipts.total_s", "receipts handed out (total)", +1, "s"),
+    ("receipts.total_s", "receipts handed out (gross)", +1, "s"),
+    ("receipts.net_s", "receipts net of tool overhead", +1, "s"),
 ]
 
 
@@ -55,6 +59,7 @@ def flatten(results: dict) -> dict:
         f["exec.plain_s"] = (plain or {}).get("wall_ms", 0) / 1000 or None
         rw = rr.get("run_warm") or {}
         f["exec.hh_warm_wall"] = rw.get("wall_s")
+        f["exec.hh_warm_exec_wall"] = rw.get("exec_wall_s")
         f["exec.hh_warm_overhead_ms"] = rw.get("overhead_ms")
         pw = rr.get("plan_warm") or {}
         if pw.get("pred_wall_s") and rw.get("wall_s"):
@@ -90,8 +95,22 @@ def flatten(results: dict) -> dict:
         if c.get("tests") and not c.get("label"):
             f[f"cap.{c['repo']}.tests"] = c["tests"]
             f[f"cap.{c['repo']}.overhead_pct"] = c.get("overhead_pct")
+            if c.get("overhead_pct_exec") is not None:
+                f[f"cap.{c['repo']}.overhead_pct_exec"] = c["overhead_pct_exec"]
+        elif c.get("label") and c.get("overhead_pct_exec") is not None and exec_ids:
+            if c["repo"] == exec_ids[0]:
+                f["exec.exec_overhead_pct"] = c["overhead_pct_exec"]
     tot = sum((d or {}).get("total_s", 0) for d in results.get("receipts", {}).values())
     f["receipts.total_s"] = tot or None
+    net = 0.0
+    seen = False
+    for rr in results.get("runs", {}).values():
+        for phase in ("cold", "warm"):
+            n = (rr.get(f"run_{phase}") or {}).get("net_s")
+            if n is not None:
+                net += n
+                seen = True
+    f["receipts.net_s"] = round(net, 1) if seen else None
     return f
 
 

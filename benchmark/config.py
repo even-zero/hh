@@ -84,6 +84,11 @@ def env_for(r: dict, extra: dict | None = None, store_env_job: str | None = None
     env["PYTHONPATH"] = os.pathsep.join(pp + [env.get("PYTHONPATH", "")]).rstrip(os.pathsep)
     if store_env_job:
         env["HH_JOB"] = store_env_job
+    req = r.get("mocha_require")
+    if req:
+        # same require hooks the repo's own npm test uses (hh's Mocha adapter
+        # reads this; suite_cmd carries the flags for the naive arm)
+        env["HH_MOCHA_REQUIRE"] = ",".join(req)
     if extra:
         env.update(extra)
     return env
