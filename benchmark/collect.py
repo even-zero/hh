@@ -94,7 +94,7 @@ def collect(cfg: dict) -> dict:
             cp_plan = os.path.join(config.logdir(rid), "clean_cold_plan.json")
             if repo["lane"] == "capture" and cr and cr.get("audit", {}).get("end"):
                 n_tests = cr["audit"]["end"]
-            elif repo["lane"] == "unittest_exec" and os.path.exists(cp_plan):
+            elif repo["lane"].endswith("_exec") and os.path.exists(cp_plan):
                 n_tests = sum(len(s["tests"]) for s in json.load(open(cp_plan))["shards"])
             reasons = None
             if pr["discovered"] == 0:
@@ -109,9 +109,11 @@ def collect(cfg: dict) -> dict:
                                   "discovered": pr["discovered"],
                                   "level": pr["operating_level"],
                                   "reasons": reasons})
-            if repo["lane"] == "unittest_exec" and os.path.exists(cp_plan):
+            if repo["lane"] == "unittest_exec" and repo.get("shim") and os.path.exists(cp_plan):
+                shim_n = sum(len(s["tests"]) for s in json.load(open(cp_plan))["shards"])
+                out["compat"][-1]["tests"] = pr["discovered"]  # native universe differs
                 out["compat"].append({"repo": f"{rid} (via shim)", "runner": repo["runner"],
-                                      "tests": n_tests, "discovered": n_tests,
+                                      "tests": shim_n, "discovered": shim_n,
                                       "level": "full"})
 
     # ---- attempt logs: harness kills + executor hh-full rows ----
@@ -137,7 +139,7 @@ def collect(cfg: dict) -> dict:
 
     # ---- exec-lane scenario blocks ----
     for repo in cfg["repos_active"]:
-        if repo["lane"] != "unittest_exec":
+        if not repo["lane"].endswith("_exec"):
             continue
         rid = repo["id"]
         ld = config.logdir(rid)
@@ -191,7 +193,7 @@ def collect(cfg: dict) -> dict:
 
     # ---- receipts (exec lanes) ----
     for repo in cfg["repos_active"]:
-        if repo["lane"] != "unittest_exec":
+        if not repo["lane"].endswith("_exec"):
             continue
         rid = repo["id"]
         for job, store_suf in ((f"{rid}-hang", "clean-hh"), (f"{rid}-resume", "resume-hh"),

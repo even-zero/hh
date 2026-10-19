@@ -92,7 +92,7 @@ def scenario_clean(repo: dict, defaults: dict) -> None:
                      policy="naive-reference", store_root=store_n,
                      log_name="clean_reference.log")
     # hh arm
-    if repo["lane"] == "unittest_exec":
+    if repo["lane"].endswith("_exec"):
         _clean_exec(repo)
     else:
         _clean_capture(repo, budget=max(ladder))
@@ -268,7 +268,7 @@ def _warm_baseline(repo: dict) -> float | None:
 # ---------------------------------------------------------------- hang
 
 def scenario_hang(repo: dict, defaults: dict) -> None:
-    if repo["lane"] == "unittest_exec":
+    if repo["lane"].endswith("_exec"):
         _hang_exec(repo)
     else:
         _hang_capture(repo, defaults)
@@ -376,7 +376,7 @@ def setup_repo(repo: dict) -> None:
     if repo.get("sitecustomize"):
         src = os.path.join(config.HERE, "assets", repo["sitecustomize"])
         shutil.copy(src, os.path.join(config.ENV_DIR, "sitecustomize.py"))
-    if repo["lane"] == "unittest_exec":
+    if repo["lane"] == "unittest_exec" and "shim" in repo:
         out = shims.build_shim(repo)
         harness.now_record(repo=repo["id"], scenario="setup", arm="meta", attempt=1,
                            kind="shim-built", shim=out)
@@ -413,7 +413,7 @@ def run_scenarios(cfg: dict, repo_ids: list[str] | None, sc_names: list[str] | N
             if name in ("probe", "workers"):
                 fn(repo)
             elif name == "resume":
-                if repo["lane"] == "unittest_exec":
+                if repo["lane"].endswith("_exec"):
                     fn(repo, defaults)
                 else:
                     harness.now_record(repo=repo["id"], scenario="resume", arm="meta",

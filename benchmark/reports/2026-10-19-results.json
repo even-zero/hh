@@ -1,0 +1,1270 @@
+{
+ "schema": 1,
+ "meta": {
+  "date": "2026-10-19",
+  "hh_version": "1.0.0",
+  "hh_commit": "287970c",
+  "python": "3.11.2",
+  "platform": "Linux-6.1.158+-x86_64-with-glibc2.36",
+  "cores": 2,
+  "repos": {
+   "tornado": "https://github.com/tornadoweb/tornado.git@e2042373bf",
+   "packaging": "https://github.com/pypa/packaging.git@ef837aad31",
+   "itsdangerous": "https://github.com/pallets/itsdangerous.git@672971d66a",
+   "markupsafe": "https://github.com/pallets/markupsafe.git@4e111271b1",
+   "chai": "https://github.com/chaijs/chai.git@78d9637c79"
+  }
+ },
+ "compat": [
+  {
+   "repo": "tornado",
+   "runner": "unittest",
+   "tests": 1575,
+   "discovered": 1575,
+   "level": "full",
+   "reasons": null
+  },
+  {
+   "repo": "tornado (via shim)",
+   "runner": "unittest",
+   "tests": 1484,
+   "discovered": 1484,
+   "level": "full"
+  },
+  {
+   "repo": "packaging",
+   "runner": "pytest",
+   "tests": 62493,
+   "discovered": 62493,
+   "level": "full",
+   "reasons": null
+  },
+  {
+   "repo": "itsdangerous",
+   "runner": "pytest",
+   "tests": 297,
+   "discovered": 297,
+   "level": "full",
+   "reasons": null
+  },
+  {
+   "repo": "markupsafe",
+   "runner": "pytest",
+   "tests": 80,
+   "discovered": 80,
+   "level": "full",
+   "reasons": null
+  },
+  {
+   "repo": "chai",
+   "runner": "node",
+   "tests": 512,
+   "discovered": 512,
+   "level": "full",
+   "reasons": null
+  }
+ ],
+ "attempt_logs": {
+  "tornado": [
+   {
+    "policy": "naive-default",
+    "suite_id": "tornado",
+    "attempt": 1,
+    "budget_s": 30.0,
+    "outcome": "ok",
+    "wall_ms": 29359.2,
+    "wasted_ms": 0.0,
+    "overhead_ms": 0.0,
+    "scenario": "clean",
+    "arm": "naive"
+   },
+   {
+    "policy": "naive-reference",
+    "suite_id": "tornado",
+    "attempt": 99,
+    "budget_s": 120.0,
+    "outcome": "ok",
+    "wall_ms": 29368.7,
+    "wasted_ms": 0.0,
+    "overhead_ms": 0.0,
+    "scenario": "clean",
+    "arm": "naive"
+   },
+   {
+    "policy": "naive-default",
+    "suite_id": "tornado",
+    "attempt": 1,
+    "budget_s": 14.3,
+    "outcome": "timeout",
+    "wall_ms": 14303.9,
+    "wasted_ms": 14303.9,
+    "overhead_ms": 0.0,
+    "scenario": "resume",
+    "arm": "naive"
+   },
+   {
+    "policy": "naive-default",
+    "suite_id": "tornado",
+    "attempt": 2,
+    "budget_s": 120.0,
+    "outcome": "ok",
+    "wall_ms": 28579.1,
+    "wasted_ms": 0.0,
+    "overhead_ms": 0.0,
+    "scenario": "resume",
+    "arm": "naive"
+   },
+   {
+    "policy": "hh-checkpointed",
+    "suite_id": "tornado",
+    "attempt": 1,
+    "budget_s": 14.3,
+    "outcome": "timeout",
+    "wall_ms": 14301.8,
+    "wasted_ms": 14301.8,
+    "overhead_ms": 0.0,
+    "scenario": "resume",
+    "arm": "hh"
+   },
+   {
+    "policy": "naive-doubling",
+    "suite_id": "tornado",
+    "attempt": 1,
+    "budget_s": 30.0,
+    "outcome": "timeout",
+    "wall_ms": 30003.4,
+    "wasted_ms": 30003.4,
+    "overhead_ms": 0.0,
+    "scenario": "hang",
+    "arm": "naive"
+   },
+   {
+    "policy": "naive-doubling",
+    "suite_id": "tornado",
+    "attempt": 2,
+    "budget_s": 60.0,
+    "outcome": "timeout",
+    "wall_ms": 60003.0,
+    "wasted_ms": 60003.0,
+    "overhead_ms": 0.0,
+    "scenario": "hang",
+    "arm": "naive"
+   },
+   {
+    "policy": "naive-doubling",
+    "suite_id": "tornado",
+    "attempt": 3,
+    "budget_s": 120.0,
+    "outcome": "timeout",
+    "wall_ms": 120003.1,
+    "wasted_ms": 120003.1,
+    "overhead_ms": 0.0,
+    "scenario": "hang",
+    "arm": "naive"
+   },
+   {
+    "ts": 1792422479.7394693,
+    "policy": "hh-full",
+    "suite_id": "tornado-clean-cold",
+    "attempt": 1,
+    "budget_s": 277.065,
+    "outcome": "ok",
+    "wall_ms": 28798.0,
+    "wasted_ms": 0.0,
+    "overhead_ms": 355.862,
+    "scenario": "(hh-full)"
+   },
+   {
+    "ts": 1792422508.8204794,
+    "policy": "hh-full",
+    "suite_id": "tornado-clean-warm",
+    "attempt": 1,
+    "budget_s": 34.942,
+    "outcome": "ok",
+    "wall_ms": 28547.4,
+    "wasted_ms": 0.0,
+    "overhead_ms": 363.592,
+    "scenario": "(hh-full)"
+   },
+   {
+    "ts": 1792422524.5132213,
+    "policy": "hh-full",
+    "suite_id": "tornado-w2",
+    "attempt": 1,
+    "budget_s": 35.361,
+    "outcome": "ok",
+    "wall_ms": 15156.3,
+    "wasted_ms": 0.0,
+    "overhead_ms": 372.365,
+    "scenario": "(hh-full)"
+   },
+   {
+    "ts": 1792422910.9425495,
+    "policy": "hh-full",
+    "suite_id": "tornado-hang",
+    "attempt": 1,
+    "budget_s": 35.695,
+    "outcome": "ok",
+    "wall_ms": 101268.8,
+    "wasted_ms": 0.0,
+    "overhead_ms": 369.718,
+    "scenario": "(hh-full)"
+   },
+   {
+    "ts": 1792422965.006749,
+    "policy": "hh-full",
+    "suite_id": "tornado-hang",
+    "attempt": 1,
+    "budget_s": 138.276,
+    "outcome": "ok",
+    "wall_ms": 53519.8,
+    "wasted_ms": 0.0,
+    "overhead_ms": 377.224,
+    "scenario": "(hh-full)"
+   },
+   {
+    "ts": 1792422999.2284133,
+    "policy": "hh-full",
+    "suite_id": "tornado-hang",
+    "attempt": 1,
+    "budget_s": 125.886,
+    "outcome": "ok",
+    "wall_ms": 33624.8,
+    "wasted_ms": 0.0,
+    "overhead_ms": 414.217,
+    "scenario": "(hh-full)"
+   },
+   {
+    "ts": 1792422599.1163325,
+    "policy": "hh-full",
+    "suite_id": "tornado-resume-finish",
+    "attempt": 1,
+    "budget_s": 277.065,
+    "outcome": "ok",
+    "wall_ms": 16317.4,
+    "wasted_ms": 0.0,
+    "overhead_ms": 428.954,
+    "scenario": "(hh-full)"
+   }
+  ],
+  "packaging": [
+   {
+    "policy": "naive-default",
+    "suite_id": "packaging",
+    "attempt": 1,
+    "budget_s": 30.0,
+    "outcome": "ok",
+    "wall_ms": 29750.7,
+    "wasted_ms": 0.0,
+    "overhead_ms": 0.0,
+    "scenario": "clean",
+    "arm": "naive"
+   },
+   {
+    "policy": "naive-reference",
+    "suite_id": "packaging",
+    "attempt": 99,
+    "budget_s": 120.0,
+    "outcome": "ok",
+    "wall_ms": 29805.0,
+    "wasted_ms": 0.0,
+    "overhead_ms": 0.0,
+    "scenario": "clean",
+    "arm": "naive"
+   },
+   {
+    "policy": "hh-capture",
+    "suite_id": "packaging",
+    "attempt": 1,
+    "budget_s": 120.0,
+    "outcome": "ok",
+    "wall_ms": 33613.3,
+    "wasted_ms": 0.0,
+    "overhead_ms": 0.0,
+    "scenario": "clean",
+    "arm": "hh-capture"
+   },
+   {
+    "policy": "naive-doubling",
+    "suite_id": "packaging",
+    "attempt": 1,
+    "budget_s": 30.0,
+    "outcome": "timeout",
+    "wall_ms": 30015.4,
+    "wasted_ms": 30015.4,
+    "overhead_ms": 0.0,
+    "scenario": "hang",
+    "arm": "naive"
+   },
+   {
+    "policy": "naive-doubling",
+    "suite_id": "packaging",
+    "attempt": 2,
+    "budget_s": 60.0,
+    "outcome": "timeout",
+    "wall_ms": 60015.4,
+    "wasted_ms": 60015.4,
+    "overhead_ms": 0.0,
+    "scenario": "hang",
+    "arm": "naive"
+   },
+   {
+    "policy": "hh-capture",
+    "suite_id": "packaging",
+    "attempt": 1,
+    "budget_s": 30.0,
+    "outcome": "timeout",
+    "wall_ms": 30015.3,
+    "wasted_ms": 30015.3,
+    "overhead_ms": 0.0,
+    "scenario": "hang",
+    "arm": "hh-capture"
+   },
+   {
+    "policy": "hh-capture",
+    "suite_id": "packaging",
+    "attempt": 2,
+    "budget_s": 60.0,
+    "outcome": "timeout",
+    "wall_ms": 60018.0,
+    "wasted_ms": 60018.0,
+    "overhead_ms": 0.0,
+    "scenario": "hang",
+    "arm": "hh-capture"
+   },
+   {
+    "policy": "hh-capture",
+    "suite_id": "packaging",
+    "attempt": 3,
+    "budget_s": 120.0,
+    "outcome": "ok",
+    "wall_ms": 33750.7,
+    "wasted_ms": 0.0,
+    "overhead_ms": 0.0,
+    "scenario": "hang",
+    "arm": "hh-capture"
+   }
+  ],
+  "itsdangerous": [
+   {
+    "policy": "naive-default",
+    "suite_id": "itsdangerous",
+    "attempt": 1,
+    "budget_s": 30.0,
+    "outcome": "ok",
+    "wall_ms": 736.9,
+    "wasted_ms": 0.0,
+    "overhead_ms": 0.0,
+    "scenario": "clean",
+    "arm": "naive"
+   },
+   {
+    "policy": "naive-reference",
+    "suite_id": "itsdangerous",
+    "attempt": 99,
+    "budget_s": 120.0,
+    "outcome": "ok",
+    "wall_ms": 730.3,
+    "wasted_ms": 0.0,
+    "overhead_ms": 0.0,
+    "scenario": "clean",
+    "arm": "naive"
+   },
+   {
+    "ts": 1792423323.6594505,
+    "policy": "hh-full",
+    "suite_id": "itsdangerous-clean-cold",
+    "attempt": 1,
+    "budget_s": 77.949,
+    "outcome": "ok",
+    "wall_ms": 812.0,
+    "wasted_ms": 0.0,
+    "overhead_ms": 344.033,
+    "scenario": "(hh-full)"
+   },
+   {
+    "ts": 1792423324.9444315,
+    "policy": "hh-full",
+    "suite_id": "itsdangerous-clean-warm",
+    "attempt": 1,
+    "budget_s": 3.0,
+    "outcome": "ok",
+    "wall_ms": 777.2,
+    "wasted_ms": 0.0,
+    "overhead_ms": 396.406,
+    "scenario": "(hh-full)"
+   },
+   {
+    "ts": 1792423326.2012496,
+    "policy": "hh-full",
+    "suite_id": "itsdangerous-w2",
+    "attempt": 1,
+    "budget_s": 3.0,
+    "outcome": "ok",
+    "wall_ms": 810.2,
+    "wasted_ms": 0.0,
+    "overhead_ms": 339.974,
+    "scenario": "(hh-full)"
+   }
+  ],
+  "markupsafe": [
+   {
+    "policy": "naive-default",
+    "suite_id": "markupsafe",
+    "attempt": 1,
+    "budget_s": 30.0,
+    "outcome": "ok",
+    "wall_ms": 473.3,
+    "wasted_ms": 0.0,
+    "overhead_ms": 0.0,
+    "scenario": "clean",
+    "arm": "naive"
+   },
+   {
+    "policy": "naive-reference",
+    "suite_id": "markupsafe",
+    "attempt": 99,
+    "budget_s": 120.0,
+    "outcome": "ok",
+    "wall_ms": 371.2,
+    "wasted_ms": 0.0,
+    "overhead_ms": 0.0,
+    "scenario": "clean",
+    "arm": "naive"
+   },
+   {
+    "ts": 1792423328.2269247,
+    "policy": "hh-full",
+    "suite_id": "markupsafe-clean-cold",
+    "attempt": 1,
+    "budget_s": 22.611,
+    "outcome": "ok",
+    "wall_ms": 412.6,
+    "wasted_ms": 0.0,
+    "overhead_ms": 296.455,
+    "scenario": "(hh-full)"
+   },
+   {
+    "ts": 1792423329.0365074,
+    "policy": "hh-full",
+    "suite_id": "markupsafe-clean-warm",
+    "attempt": 1,
+    "budget_s": 3.0,
+    "outcome": "ok",
+    "wall_ms": 381.3,
+    "wasted_ms": 0.0,
+    "overhead_ms": 324.077,
+    "scenario": "(hh-full)"
+   },
+   {
+    "ts": 1792423329.8192728,
+    "policy": "hh-full",
+    "suite_id": "markupsafe-w2",
+    "attempt": 1,
+    "budget_s": 3.0,
+    "outcome": "ok",
+    "wall_ms": 372.2,
+    "wasted_ms": 0.0,
+    "overhead_ms": 304.796,
+    "scenario": "(hh-full)"
+   }
+  ],
+  "chai": [
+   {
+    "policy": "naive-default",
+    "suite_id": "chai",
+    "attempt": 1,
+    "budget_s": 30.0,
+    "outcome": "ok",
+    "wall_ms": 567.2,
+    "wasted_ms": 0.0,
+    "overhead_ms": 0.0,
+    "scenario": "clean",
+    "arm": "naive"
+   },
+   {
+    "policy": "naive-reference",
+    "suite_id": "chai",
+    "attempt": 99,
+    "budget_s": 120.0,
+    "outcome": "ok",
+    "wall_ms": 627.0,
+    "wasted_ms": 0.0,
+    "overhead_ms": 0.0,
+    "scenario": "clean",
+    "arm": "naive"
+   },
+   {
+    "ts": 1792423332.056438,
+    "policy": "hh-full",
+    "suite_id": "chai-clean-cold",
+    "attempt": 1,
+    "budget_s": 131.361,
+    "outcome": "ok",
+    "wall_ms": 481.6,
+    "wasted_ms": 0.0,
+    "overhead_ms": 182.978,
+    "scenario": "(hh-full)"
+   },
+   {
+    "ts": 1792423332.8439147,
+    "policy": "hh-full",
+    "suite_id": "chai-clean-warm",
+    "attempt": 1,
+    "budget_s": 3.0,
+    "outcome": "ok",
+    "wall_ms": 481.7,
+    "wasted_ms": 0.0,
+    "overhead_ms": 199.802,
+    "scenario": "(hh-full)"
+   },
+   {
+    "ts": 1792423333.6004267,
+    "policy": "hh-full",
+    "suite_id": "chai-w2",
+    "attempt": 1,
+    "budget_s": 3.0,
+    "outcome": "ok",
+    "wall_ms": 465.3,
+    "wasted_ms": 0.0,
+    "overhead_ms": 182.861,
+    "scenario": "(hh-full)"
+   }
+  ]
+ },
+ "runs": {
+  "tornado": {
+   "plan_cold": {
+    "n": 1484,
+    "coverage": 0.0,
+    "n_unknown": 1484,
+    "pred_wall_s": 89.04,
+    "p50_s": 133.496,
+    "p90_s": 138.533,
+    "budget_s": 277.065,
+    "plan_overhead_ms": 329.4,
+    "level": "full",
+    "shards": 1,
+    "quarantine": []
+   },
+   "run_cold": {
+    "wall_s": 28.798,
+    "overhead_ms": 355.862,
+    "attempts": 1.0,
+    "ingested": 1484,
+    "receipt_s": 0.0
+   },
+   "plan_warm": {
+    "n": 1484,
+    "coverage": 1.0,
+    "n_unknown": 0,
+    "pred_wall_s": 28.251,
+    "p50_s": 29.312,
+    "p90_s": 30.384,
+    "budget_s": 34.942,
+    "plan_overhead_ms": 331.4,
+    "level": "full",
+    "shards": 1,
+    "quarantine": []
+   },
+   "run_warm": {
+    "wall_s": 28.547,
+    "overhead_ms": 363.592,
+    "attempts": 1.0,
+    "ingested": 1484,
+    "receipt_s": 0.0
+   },
+   "plan_w2": {
+    "n": 1484,
+    "coverage": 1.0,
+    "n_unknown": 0,
+    "pred_wall_s": 14.316,
+    "p50_s": 29.726,
+    "p90_s": 30.748,
+    "budget_s": 35.361,
+    "plan_overhead_ms": 337.3,
+    "level": "full",
+    "shards": 2,
+    "quarantine": []
+   },
+   "run_w2": {
+    "wall_s": 15.156,
+    "overhead_ms": 372.365,
+    "ingested": 1484
+   },
+   "resume": {
+    "kill_at_s": 14.3,
+    "baseline_wall_s": 28.547,
+    "plan_resume": {
+     "n": 1484,
+     "coverage": 0.0,
+     "n_unknown": 1484,
+     "pred_wall_s": 89.04,
+     "p50_s": 133.496,
+     "p90_s": 138.533,
+     "budget_s": 277.065,
+     "plan_overhead_ms": 396.8,
+     "level": "full",
+     "shards": 1,
+     "quarantine": []
+    },
+    "run_finish_wall_s": 16.317,
+    "resumed_tests": 728,
+    "resumed_s": 13.842800000000006,
+    "overhead_ms": 428.954,
+    "receipt": {
+     "job_store": "/home/user/hh/benchmark/_work/stores/tornado-resume-hh",
+     "this_call_ms": 13842.8,
+     "this_call_s": 13.8,
+     "job_id": "tornado-resume",
+     "job_total_s": 13.8,
+     "job_total_ms": 13842.8,
+     "job_suites": 1,
+     "breakdown": [
+      {
+       "kind": "resume",
+       "ms": 13842.8,
+       "basis": "728 test(s) already on this job's ledger were not re-executed \u2014 paid once, in this job"
+      }
+     ],
+     "how": "conservative: only work a restart-from-zero baseline provably re-pays is credited (ledger-backed); unbounded waits are noted, not summed \u2014 see TIME_SAVED.md",
+     "this_call_wall_s": 16.317
+    }
+   },
+   "hang": {
+    "runs": [
+     {
+      "wall_s": 101.269,
+      "overhead_ms": 369.718,
+      "attempts": 3.0,
+      "censored": 2.0,
+      "ingested": 1486,
+      "receipt_s": 93.1
+     },
+     {
+      "wall_s": 53.52,
+      "overhead_ms": 377.224,
+      "attempts": 3.0,
+      "censored": 2.0,
+      "ingested": 1486,
+      "receipt_s": 0.0
+     },
+     {
+      "wall_s": 33.625,
+      "overhead_ms": 414.217,
+      "attempts": 3.0,
+      "censored": 2.0,
+      "ingested": 1486,
+      "receipt_s": 0.0
+     }
+    ],
+    "plan1": {
+     "n": 1486,
+     "coverage": 0.996,
+     "n_unknown": 2,
+     "pred_wall_s": 28.419,
+     "p50_s": 29.719,
+     "p90_s": 30.943,
+     "budget_s": 35.695,
+     "plan_overhead_ms": 327.7,
+     "level": "full",
+     "shards": 1,
+     "quarantine": []
+    },
+    "plan2": {
+     "n": 1486,
+     "coverage": 1.0,
+     "n_unknown": 0,
+     "pred_wall_s": 28.907,
+     "p50_s": 99.5,
+     "p90_s": 120.24,
+     "budget_s": 138.276,
+     "plan_overhead_ms": 327.5,
+     "level": "full",
+     "shards": 3,
+     "quarantine": [
+      12.0,
+      12.0
+     ]
+    },
+    "plan3": {
+     "n": 1486,
+     "coverage": 1.0,
+     "n_unknown": 0,
+     "pred_wall_s": 28.883,
+     "p50_s": 87.994,
+     "p90_s": 109.466,
+     "budget_s": 125.886,
+     "plan_overhead_ms": 361.8,
+     "level": "full",
+     "shards": 3,
+     "quarantine": [
+      2.0,
+      2.0
+     ]
+    }
+   }
+  },
+  "itsdangerous": {
+   "plan_cold": {
+    "n": 297,
+    "coverage": 0.0,
+    "n_unknown": 297,
+    "pred_wall_s": 23.76,
+    "p50_s": 35.895,
+    "p90_s": 38.974,
+    "budget_s": 77.949,
+    "plan_overhead_ms": 337.1,
+    "level": "full",
+    "shards": 1,
+    "quarantine": []
+   },
+   "run_cold": {
+    "wall_s": 0.812,
+    "overhead_ms": 344.033,
+    "attempts": 1.0,
+    "ingested": 297,
+    "receipt_s": 0.0
+   },
+   "plan_warm": {
+    "n": 297,
+    "coverage": 1.0,
+    "n_unknown": 0,
+    "pred_wall_s": 0.392,
+    "p50_s": 0.554,
+    "p90_s": 0.579,
+    "budget_s": 3.0,
+    "plan_overhead_ms": 388.6,
+    "level": "record-only",
+    "shards": 1,
+    "quarantine": []
+   },
+   "run_warm": {
+    "wall_s": 0.777,
+    "overhead_ms": 396.406,
+    "attempts": 1.0,
+    "ingested": 297,
+    "receipt_s": 0.0
+   },
+   "plan_w2": {
+    "n": 297,
+    "coverage": 1.0,
+    "n_unknown": 0,
+    "pred_wall_s": 0.392,
+    "p50_s": 0.554,
+    "p90_s": 0.579,
+    "budget_s": 3.0,
+    "plan_overhead_ms": 330.4,
+    "level": "record-only",
+    "shards": 1,
+    "quarantine": []
+   },
+   "run_w2": {
+    "wall_s": 0.81,
+    "overhead_ms": 339.974,
+    "ingested": 297
+   },
+   "resume": {
+    "kill_at_s": null,
+    "baseline_wall_s": null,
+    "plan_resume": null,
+    "run_finish_wall_s": null,
+    "resumed_tests": null,
+    "resumed_s": null,
+    "overhead_ms": null,
+    "receipt": null
+   }
+  },
+  "markupsafe": {
+   "plan_cold": {
+    "n": 80,
+    "coverage": 0.0,
+    "n_unknown": 80,
+    "pred_wall_s": 6.4,
+    "p50_s": 9.668,
+    "p90_s": 11.306,
+    "budget_s": 22.611,
+    "plan_overhead_ms": 292.3,
+    "level": "full",
+    "shards": 1,
+    "quarantine": []
+   },
+   "run_cold": {
+    "wall_s": 0.413,
+    "overhead_ms": 296.455,
+    "attempts": 1.0,
+    "ingested": 80,
+    "receipt_s": 0.0
+   },
+   "plan_warm": {
+    "n": 80,
+    "coverage": 1.0,
+    "n_unknown": 0,
+    "pred_wall_s": 0.075,
+    "p50_s": 0.227,
+    "p90_s": 0.256,
+    "budget_s": 3.0,
+    "plan_overhead_ms": 319.9,
+    "level": "record-only",
+    "shards": 1,
+    "quarantine": []
+   },
+   "run_warm": {
+    "wall_s": 0.381,
+    "overhead_ms": 324.077,
+    "attempts": 1.0,
+    "ingested": 80,
+    "receipt_s": 0.0
+   },
+   "plan_w2": {
+    "n": 80,
+    "coverage": 1.0,
+    "n_unknown": 0,
+    "pred_wall_s": 0.075,
+    "p50_s": 0.227,
+    "p90_s": 0.255,
+    "budget_s": 3.0,
+    "plan_overhead_ms": 300.4,
+    "level": "record-only",
+    "shards": 1,
+    "quarantine": []
+   },
+   "run_w2": {
+    "wall_s": 0.372,
+    "overhead_ms": 304.796,
+    "ingested": 80
+   },
+   "resume": {
+    "kill_at_s": null,
+    "baseline_wall_s": null,
+    "plan_resume": null,
+    "run_finish_wall_s": null,
+    "resumed_tests": null,
+    "resumed_s": null,
+    "overhead_ms": null,
+    "receipt": null
+   }
+  },
+  "chai": {
+   "plan_cold": {
+    "n": 512,
+    "coverage": 0.0,
+    "n_unknown": 512,
+    "pred_wall_s": 40.96,
+    "p50_s": 61.46,
+    "p90_s": 65.681,
+    "budget_s": 131.361,
+    "plan_overhead_ms": 172.0,
+    "level": "full",
+    "shards": 1,
+    "quarantine": []
+   },
+   "run_cold": {
+    "wall_s": 0.482,
+    "overhead_ms": 182.978,
+    "attempts": 1.0,
+    "ingested": 512,
+    "receipt_s": 0.0
+   },
+   "plan_warm": {
+    "n": 512,
+    "coverage": 1.0,
+    "n_unknown": 0,
+    "pred_wall_s": 0.307,
+    "p50_s": 0.47,
+    "p90_s": 0.493,
+    "budget_s": 3.0,
+    "plan_overhead_ms": 186.3,
+    "level": "record-only",
+    "shards": 1,
+    "quarantine": []
+   },
+   "run_warm": {
+    "wall_s": 0.482,
+    "overhead_ms": 199.802,
+    "attempts": 1.0,
+    "ingested": 512,
+    "receipt_s": 0.0
+   },
+   "plan_w2": {
+    "n": 512,
+    "coverage": 1.0,
+    "n_unknown": 0,
+    "pred_wall_s": 0.323,
+    "p50_s": 0.487,
+    "p90_s": 0.51,
+    "budget_s": 3.0,
+    "plan_overhead_ms": 168.5,
+    "level": "record-only",
+    "shards": 1,
+    "quarantine": []
+   },
+   "run_w2": {
+    "wall_s": 0.465,
+    "overhead_ms": 182.861,
+    "ingested": 512
+   },
+   "resume": {
+    "kill_at_s": null,
+    "baseline_wall_s": null,
+    "plan_resume": null,
+    "run_finish_wall_s": null,
+    "resumed_tests": null,
+    "resumed_s": null,
+    "overhead_ms": null,
+    "receipt": null
+   }
+  }
+ },
+ "receipts": {
+  "tornado-hang": {
+   "job_id": "tornado-hang",
+   "total_ms": 93135.2,
+   "total_s": 93.1,
+   "suites": 1,
+   "by_kind": [
+    {
+     "kind": "continuation",
+     "ms": 93135.2,
+     "events": 1
+    }
+   ],
+   "latest_basis": "119 test(s) finished before a shard exceeded its budget were kept; the extension resumes the remainder, a restart-from-zero baseline re-pays them",
+   "entries": [
+    {
+     "kind": "continuation",
+     "saved_s": 93.1,
+     "claim_rule": "119 test(s) finished before a shard exceeded its budget were kept; the extension resumes the remainder, a restart-from-zero baseline re-pays them"
+    }
+   ]
+  },
+  "tornado-resume": {
+   "job_id": "tornado-resume",
+   "total_ms": 13842.8,
+   "total_s": 13.8,
+   "suites": 1,
+   "by_kind": [
+    {
+     "kind": "resume",
+     "ms": 13842.8,
+     "events": 1
+    }
+   ],
+   "latest_basis": "728 test(s) already on this job's ledger were not re-executed \u2014 paid once, in this job",
+   "entries": [
+    {
+     "kind": "resume",
+     "saved_s": 13.8,
+     "claim_rule": "728 test(s) already on this job's ledger were not re-executed \u2014 paid once, in this job"
+    }
+   ]
+  },
+  "tornado-clean": {
+   "job_id": "tornado-clean",
+   "total_ms": 0,
+   "total_s": 0.0,
+   "suites": 0,
+   "by_kind": [],
+   "latest_basis": null,
+   "entries": []
+  },
+  "itsdangerous-hang": {
+   "job_id": "itsdangerous-hang",
+   "total_ms": 0,
+   "total_s": 0.0,
+   "suites": 0,
+   "by_kind": [],
+   "latest_basis": null,
+   "entries": []
+  },
+  "itsdangerous-resume": {
+   "job_id": "itsdangerous-resume",
+   "total_ms": 0,
+   "total_s": 0.0,
+   "suites": 0,
+   "by_kind": [],
+   "latest_basis": null,
+   "entries": []
+  },
+  "itsdangerous-clean": {
+   "job_id": "itsdangerous-clean",
+   "total_ms": 0,
+   "total_s": 0.0,
+   "suites": 0,
+   "by_kind": [],
+   "latest_basis": null,
+   "entries": []
+  },
+  "markupsafe-hang": {
+   "job_id": "markupsafe-hang",
+   "total_ms": 0,
+   "total_s": 0.0,
+   "suites": 0,
+   "by_kind": [],
+   "latest_basis": null,
+   "entries": []
+  },
+  "markupsafe-resume": {
+   "job_id": "markupsafe-resume",
+   "total_ms": 0,
+   "total_s": 0.0,
+   "suites": 0,
+   "by_kind": [],
+   "latest_basis": null,
+   "entries": []
+  },
+  "markupsafe-clean": {
+   "job_id": "markupsafe-clean",
+   "total_ms": 0,
+   "total_s": 0.0,
+   "suites": 0,
+   "by_kind": [],
+   "latest_basis": null,
+   "entries": []
+  },
+  "chai-hang": {
+   "job_id": "chai-hang",
+   "total_ms": 0,
+   "total_s": 0.0,
+   "suites": 0,
+   "by_kind": [],
+   "latest_basis": null,
+   "entries": []
+  },
+  "chai-resume": {
+   "job_id": "chai-resume",
+   "total_ms": 0,
+   "total_s": 0.0,
+   "suites": 0,
+   "by_kind": [],
+   "latest_basis": null,
+   "entries": []
+  },
+  "chai-clean": {
+   "job_id": "chai-clean",
+   "total_ms": 0,
+   "total_s": 0.0,
+   "suites": 0,
+   "by_kind": [],
+   "latest_basis": null,
+   "entries": []
+  }
+ },
+ "facts": {
+  "capture_overhead": [
+   {
+    "repo": "tornado",
+    "tests": 1484,
+    "plain_s": 29.3592,
+    "capture_s": 28.878,
+    "overhead_ms": -480.8,
+    "overhead_pct": -1.64,
+    "self_metered_ms": 363.592,
+    "label": "full executor (plan+run)"
+   },
+   {
+    "repo": "packaging",
+    "tests": 62493,
+    "plain_s": 29.750700000000002,
+    "capture_s": 33.6133,
+    "overhead_ms": 3862.6,
+    "overhead_pct": 13.0,
+    "ledger_rows": 62500
+   },
+   {
+    "repo": "itsdangerous",
+    "tests": 297,
+    "plain_s": 0.7369,
+    "capture_s": 1.166,
+    "overhead_ms": 428.7,
+    "overhead_pct": 58.18,
+    "self_metered_ms": 396.406,
+    "label": "full executor (plan+run)"
+   },
+   {
+    "repo": "markupsafe",
+    "tests": 80,
+    "plain_s": 0.4733,
+    "capture_s": 0.701,
+    "overhead_ms": 227.6,
+    "overhead_pct": 48.09,
+    "self_metered_ms": 324.077,
+    "label": "full executor (plan+run)"
+   },
+   {
+    "repo": "chai",
+    "tests": 512,
+    "plain_s": 0.5672,
+    "capture_s": 0.668,
+    "overhead_ms": 101.1,
+    "overhead_pct": 17.82,
+    "self_metered_ms": 199.802,
+    "label": "full executor (plan+run)"
+   }
+  ],
+  "hang_capture": {
+   "packaging": {
+    "naive_attempts": [
+     {
+      "policy": "naive-doubling",
+      "suite_id": "packaging",
+      "attempt": 1,
+      "budget_s": 30.0,
+      "outcome": "timeout",
+      "wall_ms": 30015.4,
+      "wasted_ms": 30015.4,
+      "overhead_ms": 0.0,
+      "scenario": "hang",
+      "arm": "naive"
+     },
+     {
+      "policy": "naive-doubling",
+      "suite_id": "packaging",
+      "attempt": 2,
+      "budget_s": 60.0,
+      "outcome": "timeout",
+      "wall_ms": 60015.4,
+      "wasted_ms": 60015.4,
+      "overhead_ms": 0.0,
+      "scenario": "hang",
+      "arm": "naive"
+     }
+    ],
+    "capture_attempts": [
+     {
+      "policy": "hh-capture",
+      "suite_id": "packaging",
+      "attempt": 1,
+      "budget_s": 30.0,
+      "outcome": "timeout",
+      "wall_ms": 30015.3,
+      "wasted_ms": 30015.3,
+      "overhead_ms": 0.0,
+      "scenario": "hang",
+      "arm": "hh-capture"
+     },
+     {
+      "policy": "hh-capture",
+      "suite_id": "packaging",
+      "attempt": 2,
+      "budget_s": 60.0,
+      "outcome": "timeout",
+      "wall_ms": 60018.0,
+      "wasted_ms": 60018.0,
+      "overhead_ms": 0.0,
+      "scenario": "hang",
+      "arm": "hh-capture"
+     },
+     {
+      "policy": "hh-capture",
+      "suite_id": "packaging",
+      "attempt": 3,
+      "budget_s": 120.0,
+      "outcome": "ok",
+      "wall_ms": 33750.7,
+      "wasted_ms": 0.0,
+      "overhead_ms": 0.0,
+      "scenario": "hang",
+      "arm": "hh-capture"
+     }
+    ],
+    "audits": [
+     {
+      "rows": 57075,
+      "start": 7,
+      "end": 57068,
+      "open_intervals": [],
+      "status": {},
+      "attempt": 1
+     },
+     {
+      "rows": 62501,
+      "start": 8,
+      "end": 62493,
+      "open_intervals": [
+       "tests/test_zzhang.py::test_never_finishes"
+      ],
+      "status": {},
+      "attempt": 2
+     },
+     {
+      "rows": 62500,
+      "start": 7,
+      "end": 62493,
+      "open_intervals": [],
+      "status": {},
+      "attempt": 3
+     }
+    ],
+    "hang_identified": "tests/test_zzhang.py::test_never_finishes"
+   }
+  }
+ },
+ "repos": {
+  "tornado": {
+   "display": "tornado",
+   "stars": "22.2k",
+   "clone": {
+    "url": "https://github.com/tornadoweb/tornado.git",
+    "ref": "e2042373bf13ec274bc75b95a85c7e2cf327d52d",
+    "depth": null
+   },
+   "lane": "unittest_exec",
+   "runner": "unittest",
+   "notes": "Executor lane runs against the compat shim (documented in dashboard methodology); the shim re-exports only TestCase classes DEFINED in each module. 1484 unique tests = the suite's own universe, verified equal in both arms.",
+   "n_tests_expected": 1484
+  },
+  "packaging": {
+   "display": "packaging",
+   "stars": "751",
+   "clone": {
+    "url": "https://github.com/pypa/packaging.git",
+    "ref": "ef837aad3127167671eb37b9f6bd8a94ec7ce26e",
+    "depth": 1
+   },
+   "lane": "capture",
+   "runner": "pytest",
+   "notes": "hang variant descopes by test name after the ledger's open interval names the culprit (scenario does this automatically).",
+   "n_tests_expected": 62493
+  },
+  "itsdangerous": {
+   "display": "itsdangerous",
+   "stars": "3.1k",
+   "clone": {
+    "url": "https://github.com/pallets/itsdangerous.git",
+    "ref": "672971d66a2ef9f85151e53283113f33d642dabd",
+    "depth": 1
+   },
+   "lane": "pytest_exec",
+   "runner": "pytest",
+   "notes": null,
+   "n_tests_expected": 297
+  },
+  "markupsafe": {
+   "display": "markupsafe",
+   "stars": "698",
+   "clone": {
+    "url": "https://github.com/pallets/markupsafe.git",
+    "ref": "4e111271b1494995708a9e878a10829b5e10c7ba",
+    "depth": 1
+   },
+   "lane": "pytest_exec",
+   "runner": "pytest",
+   "notes": "Pure-python mode unless a C extension is built upstream; skips are expected (~41) and appear in both arms identically.",
+   "n_tests_expected": 80
+  },
+  "chai": {
+   "display": "chai",
+   "stars": "8.3k",
+   "clone": {
+    "url": "https://github.com/chaijs/chai.git",
+    "ref": "78d9637c79e211ed4f2455d9ba9b8a47be22dc6c",
+    "depth": 1
+   },
+   "lane": "mocha_exec",
+   "runner": "node",
+   "notes": "Suite is ESM+bundle: esbuild step reproduces upstream's `npm run build`. Reporter row identity is file-stem based (hh's reporter).",
+   "n_tests_expected": 512
+  }
+ }
+}

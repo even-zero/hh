@@ -27,8 +27,8 @@ receipts), and `_work/logs/*` (plans, run JSONs, ledgers, naive run logs).
   suite's real size (the compatibility gap).
 - **clean** — naive default ladder (30s→60s→120s, escalate only on timeout)
   with a harness process-group SIGKILL, vs the hh lane: executor plan/run
-  (cold + warm, unittest suites) or a Tier-A capture run (pytest plugin /
-  mocha reporter) audited through the ledger + `hh record`.
+  (cold + warm; unittest, pytest or Mocha suites) or a Tier-A capture run
+  (pytest plugin / mocha reporter) audited through the ledger + `hh record`.
 - **workers** — hh plan/run at W=2 against the warm store.
 - **resume** — SIGKILL at `auto:0.5` (half the measured warm wall) then finish;
   naive re-runs from zero, hh `plan --resume`s from checkpoints.
@@ -50,9 +50,10 @@ Copy an entry in `benchmark/repos.json` and edit it — no code changes.
 Key fields:
 - `clone.url` + `clone.ref` — pin the exact commit (replication means the
   exact same code measured).
-- `lane`: `unittest_exec` (manifest must discover it; add a `shim` spec for
-  `*_test.py`-style layouts → both arms are measured through the shim) or
-  `capture` (`capture_kind`: `pytest_plugin` | `mocha_reporter`).
+- `lane`: `unittest_exec` (optional shim preserves the historical 1484-test
+  Tornado execution universe; native `*_test.py` discovery works without it),
+  `pytest_exec`, `mocha_exec`, or `capture` (`capture_kind`: `pytest_plugin` |
+  `mocha_reporter`). Executor plans always select tests via a file, not argv.
 - `suite_cmd` — the naive command (`{repo_dir}`, `{shim}` placeholders).
 - `pythonpath` — dirs joined onto PYTHONPATH (hh root is always included).
 - `setup` — extra shell cmds (`pip install`, `npm ci`, bundling`).
@@ -83,6 +84,10 @@ table marks ±5% as "same"). Store new baselines as new files under `baseline/`.
 4. Receipts are read from the SAME store that executed the run (receipts
    attribute by job id).
 5. Invalidated measurements are deleted and re-measured, never patched.
+6. Compare only like-for-like capture percentages: executor startups dominate
+   subsecond suites and are reported separately, not as capture regressions.
+   For a fresh all-scenario rerun, clear `_work/records.jsonl`, `logs/`,
+   `stores/`, and `results/` first; the runner appends records by design.
 
 ## Layout
 

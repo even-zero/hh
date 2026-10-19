@@ -70,18 +70,36 @@ def _mark_victim_censored(ledger: str, remaining: list[dict], kill_ts: float) ->
     return False
 
 
-def _cmd(adapter: str, root: str, ledger: str, tests: list[str]) -> list[str]:
+def _cmd(adapter: str, root: str, ledger: str, tests_file: str) -> list[str]:
+    if adapter == "hh.adapters.mocha_stream":
+        script = os.path.join(os.path.dirname(__file__), "adapters", "mocha_stream.cjs")
+        return ["node", script, "run", root, ledger, tests_file]
     return [sys.executable, "-m", adapter, "--root", root, "--ledger", ledger,
-            "--tests", *tests]
+            "--tests-file", tests_file]
+
+
+def _selection_file(checkpoint: str, si: int, tests: list[dict]) -> str:
+    # A path per shard (not a 60k-ID argv); atomically replace for retries.
+    path = os.path.join(checkpoint, f"shard-{si}.jsonl")
+    temp = path + ".tmp"
+    with open(temp, "w", encoding="utf-8") as f:
+        for t in tests:
+            f.write(json.dumps({"raw_id": t["raw_id"], "key": t["key"]}) + "\n")
+    os.replace(temp, path)
+    return path
 
 
 def _run(cmd: list[str], timeout: float, env: dict) -> tuple[bool, float, str]:
     t0 = time.perf_counter()
+    p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                         text=True, env=env)  # share caller group: external SIGKILL kills both
     try:
-        p = subprocess.run(cmd, timeout=timeout, capture_output=True, text=True, env=env)
-        return p.returncode == 0, time.perf_counter() - t0, (p.stdout + p.stderr)[-2000:]
+        out, err = p.communicate(timeout=timeout)
     except subprocess.TimeoutExpired:
+        p.kill()
+        p.communicate()
         return False, time.perf_counter() - t0, "TIMEOUT"
+    return p.returncode == 0, time.perf_counter() - t0, (out + err)[-2000:]
 
 
 def _done_map(ledger: str) -> dict:
@@ -140,7 +158,7 @@ def execute(plan: dict, root: str, adapter: str = "hh.adapters.unittest_stream",
         while tests:
             bump("attempts")
             ok, wall, out = _run(
-                _cmd(adapter, root, ledger, [t["raw_id"] for t in tests]),
+                _cmd(adapter, root, ledger, _selection_file(plan["checkpoint_dir"], si, tests)),
                 budget, env,
             )
             bump("wall_s", wall)
@@ -198,7 +216,7 @@ def execute(plan: dict, root: str, adapter: str = "hh.adapters.unittest_stream",
                     bump("attempts")
                     q_budget = hang_cutoff if t.get("hang_tier", 0) >= 2 else cutoff_default
                     ok2, wall2, _ = _run(
-                        _cmd(adapter, root, ledger, [t["raw_id"]]), q_budget, env)
+                        _cmd(adapter, root, ledger, _selection_file(plan["checkpoint_dir"], si, [t])), q_budget, env)
                     bump("wall_s", wall2)
                     bump("compute_s", wall2)
                     if t["key"] not in _done_keys(ledger):

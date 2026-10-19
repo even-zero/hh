@@ -238,6 +238,15 @@ finished); Tier B parses post-hoc reports; Tier C is the generic fallback.
 | JUnit Platform (JVM)                                                                                                           | A + B | `HhJUnitListener.java` (ServiceLoader), and Surefire XML                            |
 | Surefire · TestNG · PHPUnit · RSpec · GoogleTest · Catch2 · cargo-nextest · mocha-junit · pytest-xml · .NET JUnit · VSTest TRX | B     | one `junit_xml`/`trx` parser family, conformance-tested on recorded fixtures        |
 
+`hh plan --runner pytest` / `hh run --runner pytest` use pytest's
+post-deselection `tests/` collection and a checkpointed selectable adapter
+(`pytest` must be installed). `--runner node` currently means a locally installed
+**Mocha** runner using its default top-level `test/*` files; Node's built-in
+`node:test` still has a capture reporter, not an executor manifest. Unittest
+plans discover both `test_*.py` and `*_test.py` natively. The Python pytest
+capture plugin checkpoints every completed test; tests active for at least
+20 ms also get a start row to identify hangs after a hard kill.
+
 Run the conformance matrix yourself:
 
 ```bash

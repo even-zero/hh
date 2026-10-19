@@ -71,31 +71,69 @@ def collect_manifest(root: str, runner: str, meter: Meter) -> tuple[list[str], d
     import importlib
     import unittest
     root_abs = os.path.abspath(root)
-    with meter.span("collect"):
-        # long-lived agent processes: evict stale modules under the suite root,
-        # or a test file edited between calls stays invisible (import cache)
-        for name, mod in list(sys.modules.items()):
-            f = getattr(mod, "__file__", None)
-            if f and os.path.abspath(f).startswith(root_abs + os.sep):
-                sys.modules.pop(name, None)
-        importlib.invalidate_caches()
-        sys.path.insert(0, root_abs)
-        suite = unittest.defaultTestLoader.discover(
-            os.path.abspath(root), pattern="test_*.py", top_level_dir=os.path.abspath(root))
+    if runner == "pytest":
+        import subprocess
+        import tempfile
+        with meter.span("collect"):
+            with tempfile.TemporaryDirectory(prefix="hh-collect-") as tmp:
+                out = os.path.join(tmp, "nodeids.jsonl")
+                proc = subprocess.run(
+                    [sys.executable, "-m", "hh.adapters.pytest_stream", "--root", root_abs,
+                     "--collect-out", out], capture_output=True, text=True)
+                if proc.returncode not in (0, 5) or not os.path.exists(out):
+                    raise RuntimeError(f"pytest collection failed: {(proc.stdout + proc.stderr)[-3000:]}")
+                with open(out, encoding="utf-8") as f:
+                    raw_ids = [json.loads(line) for line in f]
+    elif runner == "node":
+        import subprocess
+        with meter.span("collect"):
+            script = os.path.join(os.path.dirname(__file__), "adapters", "mocha_stream.cjs")
+            proc = subprocess.run(["node", script, "collect", root_abs],
+                                  capture_output=True, text=True)
+            if proc.returncode:
+                raise RuntimeError(f"Mocha collection failed: {(proc.stdout + proc.stderr)[-3000:]}")
+            entries = [json.loads(line) for line in proc.stdout.splitlines() if line.strip()]
+        return [e["key"] for e in entries], {e["key"]: e["raw_id"] for e in entries}
+    elif runner == "unittest":
+        with meter.span("collect"):
+            # Long-lived agent processes must not reuse imported stale test modules.
+            for name, mod in list(sys.modules.items()):
+                f = getattr(mod, "__file__", None)
+                if f and os.path.abspath(f).startswith(root_abs + os.sep):
+                    sys.modules.pop(name, None)
+            importlib.invalidate_caches()
+            sys.path.insert(0, root_abs)
+            raw_ids = []
+            for pattern in ("test_*.py", "*_test.py"):
+                loader = unittest.TestLoader()
+                suite = loader.discover(root_abs, pattern=pattern, top_level_dir=root_abs)
+                if loader.errors:
+                    raise RuntimeError("unittest collection failed: " + "; ".join(loader.errors))
 
-        def flatten(s):
-            out = []
-            for t in s:
-                out.extend(flatten(t)) if isinstance(t, unittest.TestSuite) else out.append(t)
-            return out
-        tests = flatten(suite)
-    raw_of, keys = {}, []
-    for t in tests:
-        raw = t.id()
-        k = normalize(runner, raw)
-        keys.append(k)
-        raw_of[k] = raw
-    return keys, raw_of
+                def flatten(s):
+                    for test in s:
+                        if isinstance(test, unittest.TestSuite):
+                            yield from flatten(test)
+                        else:
+                            yield test.id()
+
+                raw_ids.extend(flatten(suite))
+    else:
+        raise ValueError(f"unsupported executable runner: {runner}")
+    # The historical class-agnostic key can collide for inherited test methods.
+    # Keep existing store identities for unambiguous tests, but disambiguate
+    # collisions deterministically so no runnable test silently disappears.
+    from collections import Counter
+    import hashlib
+    raw_ids = list(dict.fromkeys(raw_ids))
+    counts = Counter(normalize(runner, raw) for raw in raw_ids)
+    raw_of = {}
+    for raw in raw_ids:
+        key = normalize(runner, raw)
+        if counts[key] > 1:
+            key += " :: collision-" + hashlib.sha1(raw.encode()).hexdigest()[:12]
+        raw_of[key] = raw
+    return list(raw_of), raw_of
 
 
 def build_plan(root: str, runner: str = "unittest", workers: int = 2,
@@ -126,7 +164,7 @@ def build_plan(root: str, runner: str = "unittest", workers: int = 2,
 
 
 def execute_plan(plan: dict, root: str, runner: str = "unittest",
-                 adapter: str = "hh.adapters.unittest_stream",
+                 adapter: str | None = None,
                  store_root: str = ".", suite_id: str = "run",
                  log=lambda *a: None, caller_limit_s: float | None = None,
                  job: str | None = None) -> dict:
@@ -135,6 +173,9 @@ def execute_plan(plan: dict, root: str, runner: str = "unittest",
     meter = Meter()
     st = store_mod.Store(store_root)
     t0 = time.perf_counter()
+    adapter = adapter or {"unittest": "hh.adapters.unittest_stream",
+                          "pytest": "hh.adapters.pytest_stream",
+                          "node": "hh.adapters.mocha_stream"}[runner]
     stats = execute(plan, os.path.abspath(root), adapter=adapter, log=log)
     wall = time.perf_counter() - t0
     ledger = os.path.join(plan["checkpoint_dir"], "ledger.jsonl")
