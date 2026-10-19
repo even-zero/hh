@@ -1,38 +1,85 @@
-"""Tier A adapter: pytest plugin (live ledger checkpoints).
+"""Tier A pytest ledger plugin: checkpoint ends, name tests that stall.
 
-Use:  HH_LEDGER=path/ledger.jsonl python3 -m pytest -p hh.adapters.pytest_plugin ...
-Durations are free on the test report (Law: never add a pass over the suite).
+Fast tests emit only an end row. A daemon watchdog emits an open start row for
+any test still active after the grace period (20ms by default); this retains
+hang attribution without doubling ledger traffic on enormous fast suites.
+Finished tests always emit an end row before pytest moves to the next test.
 """
 from __future__ import annotations
 
+import json
 import os
+import threading
 import time
 
 from .base import end_row, start_row
 from ..keys import normalize
 
 RUNNER = "pytest"
-_T0: dict[str, float] = {}
+_GRACE_NS = max(1_000_000, int(float(os.environ.get("HH_START_GRACE_MS", "20")) * 1_000_000))
+_ACTIVE = None  # (nodeid, perf_start, key, ledger) for the current test
+_LOCK = threading.Lock()
+_WATCHER = None
+_KEYS: dict[str, str] | None = None
 
 
-def _ledger() -> str | None:
-    return os.environ.get("HH_LEDGER")
+def _key(nodeid):
+    global _KEYS
+    if _KEYS is None:
+        path = os.environ.get("HH_KEYS_FILE")
+        if path:
+            with open(path, encoding="utf-8") as f:
+                _KEYS = {entry["raw_id"]: entry["key"] for line in f
+                         for entry in [json.loads(line)]}
+        else:
+            _KEYS = {}
+    return _KEYS.get(nodeid, normalize(RUNNER, nodeid))
+
+
+def _watch():
+    global _ACTIVE
+    while True:
+        time.sleep(_GRACE_NS / 2_000_000_000)
+        entry = _ACTIVE
+        if entry is not None and len(entry) == 4 and time.clock_gettime_ns(time.CLOCK_MONOTONIC) - entry[1] >= _GRACE_NS:
+            with _LOCK:
+                if _ACTIVE is entry and len(entry) == 4:
+                    start_row(entry[3], entry[2], entry[0])
+                    # Leave entry intact; a start exists for this test now.
+                    _ACTIVE = (entry[0], entry[1], entry[2], entry[3], True)
 
 
 def pytest_runtest_logstart(nodeid, location):
-    led = _ledger()
-    if led:
-        _T0[nodeid] = time.perf_counter()
-        start_row(led, normalize(RUNNER, nodeid), nodeid)
+    global _WATCHER, _ACTIVE
+    led = os.environ.get("HH_LEDGER")
+    if not led:
+        return
+    if _WATCHER is None:
+        _WATCHER = threading.Thread(target=_watch, daemon=True, name="hh-ledger-watch")
+        _WATCHER.start()
+    _ACTIVE = (nodeid, time.clock_gettime_ns(time.CLOCK_MONOTONIC), _key(nodeid), led)
 
 
 def pytest_runtest_logreport(report):
-    led = _ledger()
-    if not led or report.when != "call":
+    global _ACTIVE
+    if report.when != "call" and not (report.when == "setup" and
+                                      (report.skipped or report.failed)):
         return
-    t0 = _T0.pop(report.nodeid, time.perf_counter() - report.duration)
+    entry = _ACTIVE
+    if entry is None or entry[0] != report.nodeid:
+        return
+    # The watcher can only race if the test lasted past the grace period.
+    if time.clock_gettime_ns(time.CLOCK_MONOTONIC) - entry[1] >= _GRACE_NS:
+        with _LOCK:
+            entry = _ACTIVE
+            _ACTIVE = None
+    else:
+        _ACTIVE = None
+    if entry is None:
+        return
+    nodeid, t0, key, led = entry[:4]
     status = ("skipped" if report.skipped
               else "passed" if report.passed
-              else "failed" if report.outcome == "failed" else "error")
-    end_row(led, normalize(RUNNER, report.nodeid), report.nodeid, status,
-            (time.perf_counter() - t0) * 1000.0)
+              else "failed" if report.failed else "error")
+    end_row(led, key, nodeid, status,
+            (time.clock_gettime_ns(time.CLOCK_MONOTONIC) - t0) / 1_000_000)

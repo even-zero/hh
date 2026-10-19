@@ -19,7 +19,7 @@ RESULTS_DIR = os.path.join(WORK, "results")
 RECORDS = os.path.join(WORK, "records.jsonl")
 ENV_DIR = os.path.join(WORK, "env")
 
-LANES = ("unittest_exec", "capture")
+LANES = ("unittest_exec", "pytest_exec", "mocha_exec", "capture")
 CAPTURE_KINDS = ("pytest_plugin", "mocha_reporter")
 
 
@@ -47,9 +47,6 @@ def validate(r: dict) -> None:
         raise ConfigError(f"{r['id']}: lane must be one of {LANES}")
     if r["lane"] == "capture" and r.get("capture_kind") not in CAPTURE_KINDS:
         raise ConfigError(f"{r['id']}: capture lane needs capture_kind ∈ {CAPTURE_KINDS}")
-    if r["lane"] == "unittest_exec" and "shim" not in r:
-        raise ConfigError(f"{r['id']}: unittest_exec needs a shim spec "
-                          f"(or extend shim.py for native discovery)")
 
 
 # ---------- path helpers ----------

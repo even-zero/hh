@@ -200,7 +200,7 @@ def main(argv=None):
     p.add_argument("--plan", required=True)
     p.add_argument("--root", required=True)
     p.add_argument("--runner", default="unittest")
-    p.add_argument("--adapter", default="hh.adapters.unittest_stream")
+    p.add_argument("--adapter", default=None)
     p.add_argument("--suite-id", default="run")
     p.set_defaults(fn=cmd_run)
 

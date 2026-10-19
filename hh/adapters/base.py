@@ -6,13 +6,28 @@ import os
 import time
 
 
+# A single O_APPEND descriptor per ledger and process: every row is still one
+# write(2), so a SIGKILL keeps all complete rows, without open/close per test.
+# Discard inherited descriptors on fork (pytest plugins may fork workers).
+_FDS: dict[str, int] = {}
+_PID = os.getpid()
+
+
 def append_row(ledger: str, row: dict) -> None:
-    """One flush per row: crash-safe checkpointing (Law 2: never block tests
-    on batch I/O). Flush (not fsync) is the right trade: it survives process
-    SIGKILL — the failure mode that matters — and costs ~10µs vs ~1ms/fsync."""
-    with open(ledger, "a", encoding="utf-8") as f:
-        f.write(json.dumps(row) + "\n")
-        f.flush()
+    global _PID
+    if _PID != os.getpid():
+        for fd in _FDS.values():
+            os.close(fd)
+        _FDS.clear()
+        _PID = os.getpid()
+    fd = _FDS.get(ledger)
+    if fd is None:
+        fd = os.open(ledger, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o666)
+        _FDS[ledger] = fd
+    data = (json.dumps(row) + "\n").encode("utf-8")
+    # Single append syscall per row (also safe when multiple shards write).
+    if os.write(fd, data) != len(data):
+        raise OSError("short ledger write")
 
 
 def start_row(ledger: str, key: str, raw_id: str) -> None:

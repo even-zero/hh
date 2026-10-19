@@ -63,7 +63,7 @@
       "display": "itsdangerous",
       "stars": "3.1k",
       "clone": {"url": "https://github.com/pallets/itsdangerous.git", "ref": "672971d66a2ef9f85151e53283113f33d642dabd", "depth": 1},
-      "lane": "capture",
+      "lane": "pytest_exec",
       "capture_kind": "pytest_plugin",
       "pythonpath": ["src"],
       "setup": [
@@ -71,7 +71,7 @@
       ],
       "suite_cmd": ["python3", "-m", "pytest", "tests", "-q", "-p", "no:cacheprovider"],
       "runner": "pytest",
-      "scenarios": {"probe": {"root": "."}, "clean": true},
+      "scenarios": {"probe": {"root": "."}, "clean": true, "workers": [1, 2]},
       "n_tests_expected": 297
     },
     {
@@ -79,12 +79,12 @@
       "display": "markupsafe",
       "stars": "698",
       "clone": {"url": "https://github.com/pallets/markupsafe.git", "ref": "4e111271b1494995708a9e878a10829b5e10c7ba", "depth": 1},
-      "lane": "capture",
+      "lane": "pytest_exec",
       "capture_kind": "pytest_plugin",
       "pythonpath": ["src"],
       "suite_cmd": ["python3", "-m", "pytest", "tests", "-q", "-p", "no:cacheprovider"],
       "runner": "pytest",
-      "scenarios": {"probe": {"root": "."}, "clean": true},
+      "scenarios": {"probe": {"root": "."}, "clean": true, "workers": [1, 2]},
       "n_tests_expected": 80,
       "notes": "Pure-python mode unless a C extension is built upstream; skips are expected (~41) and appear in both arms identically."
     },
@@ -93,7 +93,7 @@
       "display": "chai",
       "stars": "8.3k",
       "clone": {"url": "https://github.com/chaijs/chai.git", "ref": "78d9637c79e211ed4f2455d9ba9b8a47be22dc6c", "depth": 1},
-      "lane": "capture",
+      "lane": "mocha_exec",
       "capture_kind": "mocha_reporter",
       "pythonpath": [],
       "setup": [
@@ -101,8 +101,8 @@
         ["./node_modules/.bin/esbuild", "--bundle", "--format=esm", "--target=es2021", "--keep-names", "--legal-comments=none", "--outfile=index.js", "lib/chai.js"]
       ],
       "suite_cmd": ["./node_modules/.bin/mocha", "test/*.js"],
-      "runner": "mocha",
-      "scenarios": {"probe": {"root": ".", "runner_override": "node"}, "clean": true},
+      "runner": "node",
+      "scenarios": {"probe": {"root": ".", "runner_override": "node"}, "clean": true, "workers": [1, 2]},
       "n_tests_expected": 512,
       "notes": "Suite is ESM+bundle: esbuild step reproduces upstream's `npm run build`. Reporter row identity is file-stem based (hh's reporter)."
     },
@@ -127,7 +127,7 @@
                   "inject": [{"path": "tests/test_zzhang.py", "code_key": "pytest_while_true"}]}
       },
       "n_tests_expected": 0,
-      "notes": "When hh's manifest learns pytest (the /benchmark finding #6), switch \"lane\" to the new executor lane and enable workers/resume - the scenario code is shared."
+      "notes": "For native pytest execution, choose pytest_exec and enable workers/resume; capture remains available for measuring plugin-only overhead."
     }
   ]
 }

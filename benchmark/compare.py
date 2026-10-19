@@ -85,7 +85,9 @@ def flatten(results: dict) -> dict:
             rec = next((x["receipt_s"] for x in reversed(h["runs"]) if x.get("receipt_s")), None)
             f["exec.hang_receipt_s"] = rec
     for c in results.get("facts", {}).get("capture_overhead", []):
-        if c.get("tests"):
+        # A full executor includes collection/process startup; do not present
+        # it as a like-for-like capture-only overhead regression.
+        if c.get("tests") and not c.get("label"):
             f[f"cap.{c['repo']}.tests"] = c["tests"]
             f[f"cap.{c['repo']}.overhead_pct"] = c.get("overhead_pct")
     tot = sum((d or {}).get("total_s", 0) for d in results.get("receipts", {}).values())
@@ -169,16 +171,12 @@ def compare(baseline_path: str = DEFAULT_BASELINE,
     rows = [f"# benchmark delta — {os.path.basename(baseline_path)} vs current run", "",
             "| metric | baseline | current | Δ | verdict |", "|---|---:|---:|---:|---|"]
     better = worse = 0
-    direction_of = {}
-    for path, _, d, _ in METRICS:
-        stem = path.replace(".*.", ".").replace(".*", "")
-        direction_of[stem] = d
+    direction_of = {path: direction for path, _, direction, _ in METRICS
+                    if "*" not in path}
     for k in keys:
         b, c = base.get(k), cur.get(k)
-        stem = ("cap." if k.startswith("cap.") else
-                "exec." if k.startswith("exec.") else
-                "compat." if k.startswith("compat.") else "receipts.")
-        d = direction_of.get(stem, 0)
+        d = (-1 if k.startswith("cap.") and k.endswith(".overhead_pct")
+             else 0 if k.startswith("cap.") else direction_of.get(k, 0))
         if b is None or c is None:
             verdict = "—"
         elif not isinstance(b, (int, float)) or not isinstance(c, (int, float)):
