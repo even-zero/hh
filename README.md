@@ -1,4 +1,4 @@
-# hh — faster agentic testing
+# hh — bayesian-optimized agentic testing
 
 **Your agent guesses how long the tests take, sets that guess as a timeout, and
 when the guess is low the harness kills the run — discarding everything — and the
