@@ -22,9 +22,13 @@ e.g. the fresh 2026-10-19 repo set:
 python3 -m benchmark --repos-file benchmark/repos.fresh.json all
 ```
 
-The fix round that followed is documented in
-`REPORT-2026-10-20-fixes.md` (same five repos, same scenarios; cold-start
-sampling, recursive discovery, collection-excluded timing and net receipts).
+Two fix rounds followed:
+
+- `REPORT-2026-10-20-fixes.md` — recursive discovery, collection-excluded
+  timing, net receipts (cold-start *sampling*, now removed).
+- `REPORT-2026-10-20-cold-start.md` — the sampling/prior machinery is gone: a
+  cold store is a **record pass** (naive invocation + ledger). Cold is judged on
+  parity with the naive run of the same suite; warm lanes are unchanged.
 
 `repos.fresh.json` is a self-contained five-repo set (markdown, click, express,
 werkzeug, urllib3) used for the cross-repo comparison report
@@ -41,12 +45,16 @@ receipts), and `_work/logs/*` (plans, run JSONs, ledgers, naive run logs).
 
 ## What it measures (scenarios, arms)
 
-- **probe** — `hh plan` on the repo *as shipped*: manifest engagement vs the
-  suite's real size (the compatibility gap).
+- **probe** — `hh discover` on the repo *as shipped*: manifest engagement vs the
+  suite's real size (the compatibility gap), plus the cold plan's operating
+  level (it must be `record`: no enumeration, no prediction).
 - **clean** — naive default ladder (30s→60s→120s, escalate only on timeout)
   with a harness process-group SIGKILL, vs the hh lane: executor plan/run
   (cold + warm; unittest, pytest or Mocha suites) or a Tier-A capture run
   (pytest plugin / mocha reporter) audited through the ledger + `hh record`.
+  The **cold** pass is a record plan — one full-suite process, no test list, no
+  prediction — so its only honest success condition is parity with the naive
+  run (`record.delta_pct ≈ 0`).
 - **workers** — hh plan/run at W=2 against the warm store.
 - **resume** — SIGKILL at `auto:0.5` (half the measured warm wall) then finish;
   naive re-runs from zero, hh `plan --resume`s from checkpoints.

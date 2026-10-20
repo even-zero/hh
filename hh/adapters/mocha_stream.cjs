@@ -60,16 +60,24 @@ async function main() {
       console.log(JSON.stringify({ key: key(test), raw_id: key(test) }));
     return;
   }
-  const selected = new Set(fs.readFileSync(selection, 'utf8').trim().split('\n').filter(Boolean).map(line => JSON.parse(line).raw_id));
-  function filter(suite) {
-    suite.tests = suite.tests.filter(t => selected.has(key(t)));
-    for (const child of suite.suites) filter(child);
-    suite.suites = suite.suites.filter(s => s.tests.length || s.suites.length);
+  // No selection file => record the whole suite in this one process, exactly
+  // like `mocha test/` would (cold record pass).
+  if (selection) {
+    const selected = new Set(fs.readFileSync(selection, 'utf8').trim().split('\n').filter(Boolean).map(line => JSON.parse(line).raw_id));
+    const filter = suite => {
+      suite.tests = suite.tests.filter(t => selected.has(key(t)));
+      for (const child of suite.suites) filter(child);
+      suite.suites = suite.suites.filter(s => s.tests.length || s.suites.length);
+    };
+    filter(mocha.suite);
   }
-  filter(mocha.suite);
   const fd = fs.openSync(ledger, 'a');
   const write = row => fs.writeSync(fd, JSON.stringify(row) + '\n');
   const runner = mocha.run(failures => { fs.closeSync(fd); process.exitCode = failures ? 1 : 0; });
+  // Completeness marker (see base.suite_end_row): emitted only when the run
+  // loop reaches its end, so a killed record pass cannot seal a manifest.
+  runner.on('end', () => write({ type: 'suite_end',
+    tests: runner.stats ? runner.stats.tests : 0, ts: Date.now() / 1000 }));
   const started = new Map();
   runner.on('test', test => {
     started.set(test, process.hrtime.bigint());

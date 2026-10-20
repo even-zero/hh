@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 import os
 import platform
+import statistics
 import subprocess
 import time
 
@@ -40,6 +41,27 @@ def rec_find(recs, repo, kind, scenario=None, attempt=None):
     return None
 
 
+def rec_last_n(recs, n, **match):
+    """The newest `n` rows matching every flat key=value in `match`.
+
+    A single clean pass is noisy (a 5.4 s cold pass for a 3.5 s suite reads as
+    +50 %). Reports use medians over the last few passes; the rows come from
+    records.jsonl, which is append-only across runs.
+    """
+    out = []
+    for r in reversed(recs):
+        if all(r.get(k) == v for k, v in match.items()):
+            out.append(r)
+            if len(out) >= n:
+                break
+    return list(reversed(out))
+
+
+def med(rows, key):
+    vals = [r.get(key) for r in rows if r.get(key) is not None]
+    return round(statistics.median(vals), 3) if vals else None
+
+
 def est_of(plan_path: str) -> dict | None:
     if not plan_path or not os.path.exists(plan_path):
         return None
@@ -47,10 +69,9 @@ def est_of(plan_path: str) -> dict | None:
     e = d.get("est", {})
     b = e.get("breakdown", {})
     return {"n": b.get("n_tests"), "coverage": e.get("coverage"),
-            "coverage_measured": e.get("coverage_measured"),
+            "measured_tests": d.get("measured_tests"),
             "calibration": e.get("calibration"),
             "manifest": d.get("manifest_size"),
-            "sample": (d.get("sample_phase") or {}).get("sample_size"),
             "startup_s": d.get("startup_s"),
             "n_unknown": e.get("n_unknown"), "pred_wall_s": d.get("predicted_wall_s"),
             "pred_exec_wall_s": d.get("predicted_exec_wall_s"),
@@ -103,8 +124,10 @@ def collect(cfg: dict) -> dict:
             cp_plan = os.path.join(config.logdir(rid), "clean_cold_plan.json")
             if repo["lane"] == "capture" and cr and cr.get("audit", {}).get("end"):
                 n_tests = cr["audit"]["end"]
-            elif repo["lane"].endswith("_exec") and os.path.exists(cp_plan):
-                n_tests = sum(len(s["tests"]) for s in json.load(open(cp_plan))["shards"])
+            elif repo["lane"].endswith("_exec"):
+                # a cold plan no longer enumerates: the probe's `hh discover`
+                # manifest is the measured universe
+                n_tests = pr.get("discovered") or n_tests
             reasons = None
             if pr["discovered"] == 0:
                 reasons = ("unittest manifest can't see pytest functions"
@@ -160,18 +183,23 @@ def collect(cfg: dict) -> dict:
         blk = {}
         for phase in ("cold", "warm"):
             blk[f"plan_{phase}"] = est_of(os.path.join(ld, f"clean_{phase}_plan.json"))
-            st = rec_find(recs, rid, f"run-{phase}-stats")
-            if st:
-                blk[f"run_{phase}"] = {"wall_s": st.get("wall_s"),
-                                       "exec_wall_s": st.get("exec_wall_s"),
-                                       "startup_s": st.get("startup_s"),
-                                       "overhead_ms": st.get("overhead_ms"),
-                                       "attempts": st.get("stats", {}).get("attempts"),
-                                       "ingested": st.get("ingested"),
-                                       "phases": st.get("phases"),
-                                       "pred_exec_wall_s": st.get("predicted_exec_wall_s"),
-                                       "receipt_s": st.get("receipt"),
-                                       "net_s": st.get("net_s")}
+            runs = rec_last_n(recs, 5, repo=rid, kind=f"run-{phase}-stats",
+                              scenario="clean")
+            if runs:
+                last = runs[-1]
+                blk[f"run_{phase}"] = {
+                    "wall_s": med(runs, "wall_s"),
+                    "exec_wall_s": med(runs, "exec_wall_s"),
+                    "startup_s": med(runs, "startup_s"),
+                    "overhead_ms": med(runs, "overhead_ms"),
+                    "attempts": last.get("stats", {}).get("attempts"),
+                    "ingested": last.get("ingested"),
+                    "phases": last.get("phases"),
+                    "pred_exec_wall_s": last.get("predicted_exec_wall_s"),
+                    "receipt_s": last.get("receipt"),
+                    "net_s": last.get("net_s"),
+                    "complete": all(r.get("complete") is not False for r in runs),
+                    "n_runs": len(runs)}
         # workers
         for w in repo["scenarios"].get("workers", []):
             if w == 1:
@@ -181,8 +209,27 @@ def collect(cfg: dict) -> dict:
             if rr:
                 runj = _last_json(os.path.join(ld, f"workers_w{w}_run.log"))
                 blk["run_w2"] = {"wall_s": (runj or {}).get("wall_s"),
+                                 "exec_wall_s": (runj or {}).get("exec_wall_s"),
+                                 "startup_s": (runj or {}).get("startup_s"),
                                  "overhead_ms": (runj or {}).get("overhead_ms"),
                                  "ingested": (runj or {}).get("ingested")}
+        # cold pass = record-only (no prediction): compare it with the naive run
+        # of the *same* suite. Equal numbers are the success condition here;
+        # hh is not supposed to be faster on a suite it has never measured.
+        plains = rec_last_n(recs, 5, repo=rid, kind="kill_run", scenario="clean",
+                            policy="naive-default", attempt=1, outcome="ok")
+        cold = blk.get("run_cold") or {}
+        if plains and cold.get("wall_s"):
+            nv = med(plains, "wall_ms") / 1000.0
+            blk["record"] = {
+                "naive_s": round(nv, 3),
+                "hh_s": cold.get("wall_s"),
+                "delta_pct": round((cold["wall_s"] / nv - 1) * 100, 2),
+                "naive_tests": None,
+                "measured_after": (blk.get("plan_warm") or {}).get("measured_tests"),
+                "level": (blk.get("plan_cold") or {}).get("level"),
+                "n_runs": min(len(plains), cold.get("n_runs") or 0),
+            }
         # resume
         rp = rec_find(recs, rid, "resume-params")
         rs = rec_find(recs, rid, "resume-stats")
@@ -261,13 +308,14 @@ def collect(cfg: dict) -> dict:
                     "ledger_rows": ca["audit"].get("rows")})
         else:
             # exec lane: plan+run wall vs naive single-attempt wall
-            plain = next((a for a in logs if a.get("policy") == "naive-default"
-                          and a.get("scenario") == "clean" and a["outcome"] == "ok"), None)
-            rw = rec_find(recs, rid, "run-warm-stats")
-            pw = est_of(os.path.join(config.logdir(rid), "clean_warm_plan.json"))
-            if plain and rw and pw:
-                hh_tot = rw["wall_s"] + pw["plan_overhead_ms"] / 1000
-                plain_s = plain["wall_ms"] / 1000
+            plains = rec_last_n(recs, 5, repo=rid, kind="kill_run", scenario="clean",
+                                policy="naive-default", attempt=1, outcome="ok")
+            blk = out["runs"].get(rid) or {}
+            rw = blk.get("run_warm")
+            pw = blk.get("plan_warm")
+            if plains and rw and pw:
+                hh_tot = rw["wall_s"] + (pw.get("plan_overhead_ms") or 0) / 1000
+                plain_s = med(plains, "wall_ms") / 1000
                 # subtract the *same* measured collection cost from both arms:
                 # comparing "naive wall − collect-only" against "hh exec-only"
                 # mixed two different startup estimates and made hh look worse
@@ -275,8 +323,10 @@ def collect(cfg: dict) -> dict:
                 # than in-run collection).
                 hh_exec = (rw.get("exec_wall_s") if rw.get("exec_wall_s") is not None
                            else rw["wall_s"] - (rw.get("startup_s") or 0.0))
+                rec = (out["runs"].get(rid) or {}).get("record") or {}
                 facts["capture_overhead"].append({
-                    "repo": rid, "tests": (est_of(os.path.join(config.logdir(rid), "clean_cold_plan.json")) or {}).get("n"),
+                    "repo": rid, "tests": (pw or {}).get("n"),
+                    "record_s": rec.get("hh_s"), "record_pct": rec.get("delta_pct"),
                     "plain_s": plain_s,
                     "capture_s": round(hh_tot, 3),
                     # Collection is measured, not guessed: `--collect-only`

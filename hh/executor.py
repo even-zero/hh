@@ -76,12 +76,19 @@ def _mark_victim_censored(ledger: str, remaining: list[dict], kill_ts: float) ->
     return None
 
 
-def _cmd(adapter: str, root: str, ledger: str, tests_file: str) -> list[str]:
+def _cmd(adapter: str, root: str, ledger: str, tests_file: str | None) -> list[str]:
+    """Build the adapter command; ``tests_file=None`` runs the whole suite.
+
+    A cold record pass uses that form: the adapter discovers and executes in a
+    single process, exactly like the repo's naive command, and the only addition
+    is the ledger.
+    """
     if adapter == "hh.adapters.mocha_stream":
         script = os.path.join(os.path.dirname(__file__), "adapters", "mocha_stream.cjs")
-        return ["node", script, "run", root, ledger, tests_file]
-    return [sys.executable, "-m", adapter, "--root", root, "--ledger", ledger,
-            "--tests-file", tests_file]
+        cmd = ["node", script, "run", root, ledger]
+        return cmd + ([tests_file] if tests_file else [])
+    cmd = [sys.executable, "-m", adapter, "--root", root, "--ledger", ledger]
+    return cmd + (["--tests-file", tests_file] if tests_file else [])
 
 
 def _selection_file(checkpoint: str, si: int, tests: list[dict]) -> str:
@@ -155,6 +162,34 @@ def _done_map(ledger: str) -> dict:
     return m
 
 
+def _has_suite_end(ledger: str, offset: int = 0) -> bool:
+    """True when a runner process appended its completeness marker.
+
+    Only a process that reached the end of its suite writes `suite_end`; a
+    killed or crashed one does not. That is what lets a cold record pass say
+    "the ledger is the manifest" without trusting a half-finished run.
+    """
+    try:
+        with open(ledger, encoding="utf-8", errors="replace") as f:
+            f.seek(offset)
+            for line in f:
+                if suite_end_marker(line):
+                    return True
+    except OSError:
+        return False
+    return False
+
+
+def suite_end_marker(line: str) -> bool:
+    line = line.strip()
+    if not line or "suite_end" not in line:
+        return False
+    try:
+        return json.loads(line).get("type") == "suite_end"
+    except ValueError:
+        return False
+
+
 def execute(plan: dict, root: str, adapter: str = "hh.adapters.unittest_stream",
             log=print) -> dict:
     ledger = os.path.join(plan["checkpoint_dir"], "ledger.jsonl")
@@ -167,9 +202,8 @@ def execute(plan: dict, root: str, adapter: str = "hh.adapters.unittest_stream",
     # budgets are execution budgets, so every attempt's clock gets startup added
     # on top and the ladder never charges collection to the test budget.
     startup_s = float(plan.get("startup_s", 0.0) or 0.0)
-
     stats = {"attempts": 0, "wall_s": 0.0, "compute_s": 0.0,
-             "censored": 0, "shard_failures": 0, "errors": [],
+             "censored": 0, "shard_failures": 0, "incomplete": 0, "errors": [],
              # time-saved instrument (hh/savings.py)
              "resumed": 0, "resumed_ms": 0.0,
              "preserved_tests": 0, "preserved_ms": 0.0,
@@ -178,33 +212,34 @@ def execute(plan: dict, root: str, adapter: str = "hh.adapters.unittest_stream",
              "censored_wait_s": 0.0}
     import threading
     lock = threading.Lock()
+    st_full = {"suite_complete": False}   # set by a record shard that finished
 
     def bump(k: str, v: float = 1.0) -> None:
         with lock:
             stats[k] += v
 
     def run_shard(si: int, shard: dict) -> None:
+        full = bool(shard.get("full_suite"))
         done0 = _done_map(ledger)
-        tests = [t for t in shard["tests"] if t["key"] not in done0]
-        skipped = [t for t in shard["tests"] if t["key"] in done0]
+        tests = [] if full else [t for t in shard["tests"] if t["key"] not in done0]
+        skipped = [] if full else [t for t in shard["tests"] if t["key"] in done0]
         if skipped:                      # resume credit: paid once, in this job
             bump("resumed", len(skipped))
             bump("resumed_ms", sum(done0[t["key"]] for t in skipped))
-        if not tests:
+        if not tests and not full:
             return
         credited: set[str] = set()
         budget = float(shard["budget_s"])
         quarantine = bool(shard.get("quarantine"))
         ext = 0
-        while tests:
+        while tests or full:
             bump("attempts")
             # budget is exec-only; the runner also pays startup/collection
             off = _size(ledger)
             t0 = time.time()
-            ok, wall, out = _run(
-                _cmd(adapter, root, ledger, _selection_file(plan["checkpoint_dir"], si, tests)),
-                budget + startup_s, env,
-            )
+            sel = None if full else _selection_file(plan["checkpoint_dir"], si, tests)
+            ok, wall, out = _run(_cmd(adapter, root, ledger, sel),
+                                 budget + startup_s, env)
             bump("wall_s", wall)
             bump("compute_s", wall)
             # Measure the runner's real startup/collection: it is the gap
@@ -216,6 +251,38 @@ def execute(plan: dict, root: str, adapter: str = "hh.adapters.unittest_stream",
             if startup_meas:
                 bump("startup_s", startup_meas)
                 bump("startup_attempts")
+            # A full-suite shard runs under a wall-clock budget (naive
+            # semantics: discovery included); an enumerated shard gets its exec
+            # budget plus the runner startup the executor added to the clock.
+            limit = budget if full else budget + startup_meas
+            timed_out = (not ok) and wall >= limit * 0.999
+            if full:
+                if _has_suite_end(ledger, off):
+                    st_full["suite_complete"] = True
+                    log(f"  shard {si}: recorded the full suite in {wall:.1f}s")
+                    break
+                # A record pass has no predictions to escalate from: mirror the
+                # naive ladder (30 → 60 → 120 s) and then stop, like naive.
+                if timed_out:
+                    ext += 1
+                    if ext <= 2:
+                        budget = min(max(budget * 2.0, 60.0), 1200.0)
+                        log(f"    record: naive ladder → {budget:.0f}s, retry")
+                        continue
+                    bump("incomplete")
+                    log(f"  shard {si}: record pass unfinished "
+                        f"(naive would give up here)")
+                    break
+                # No marker and no timeout: the runner died on its own (import
+                # error, crash). Never let that pass for a finished suite.
+                bump("shard_failures")
+                tail = (out or "").strip().splitlines()[-6:]
+                with lock:
+                    stats["errors"].append({"shard": si, "wall_s": round(wall, 3),
+                                            "log": tail})
+                log(f"  shard {si}: adapter exited before finishing the suite: "
+                    + (tail[-1] if tail else "no output"))
+                break
             done = _done_keys(ledger)
             rem = [t for t in tests if t["key"] not in done]
             if not rem:
@@ -307,4 +374,5 @@ def execute(plan: dict, root: str, adapter: str = "hh.adapters.unittest_stream",
         with ThreadPoolExecutor(max_workers=min(len(all_shards),
                                                int(plan.get("workers_hint") or 2))) as ex:
             list(ex.map(lambda t: run_shard(*t), all_shards))
+    stats["suite_complete"] = bool(st_full["suite_complete"])
     return stats

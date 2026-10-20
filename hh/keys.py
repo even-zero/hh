@@ -39,6 +39,28 @@ def normalize(runner: str, raw_id: str) -> str:
     return key
 
 
+def unique_key_map(raw_ids: list[str], runner: str) -> dict[str, str]:
+    """raw test id -> key, disambiguating keys that normalization collapses.
+
+    Normalization drops the class segment on purpose (class renames must not
+    break identity), so ``TestA.test_init`` and ``TestB.test_init`` in one file
+    share a key. Both are runnable, so both must stay addressable: the key gets
+    a deterministic suffix derived from the raw id. Discovery and execution use
+    this one function, so they can never disagree about identities.
+    """
+    counts: dict[str, int] = {}
+    for raw in raw_ids:
+        k = normalize(runner, raw)
+        counts[k] = counts.get(k, 0) + 1
+    out: dict[str, str] = {}
+    for raw in raw_ids:
+        k = normalize(runner, raw)
+        if counts[k] > 1:
+            k += " :: collision-" + hashlib.sha1(raw.encode()).hexdigest()[:12]
+        out[raw] = k
+    return out
+
+
 def file_of(key: str) -> str:
     """File-level aggregate key for a test key (all but the last name segment)."""
     body = key.split("::", 1)[1].split(" :: ")[0]

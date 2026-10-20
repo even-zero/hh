@@ -13,9 +13,19 @@ import sys
 
 
 class Selection:
-    def __init__(self, output=None, selected=None):
+    def __init__(self, output=None, selected=None, keys_out=None, ledger=None):
         self.output = output
         self.selected = selected
+        self.keys_out = keys_out
+        self.ledger = ledger
+
+    def pytest_sessionfinish(self, session, exitstatus):
+        # Completeness marker: the session ended on its own (test failures are
+        # a normal end), as opposed to a kill. A cold record pass only trusts
+        # its ledger as a manifest when this row exists.
+        if self.ledger:
+            from .base import suite_end_row
+            suite_end_row(self.ledger, session.testscollected)
 
     def pytest_collection_modifyitems(self, items):
         if self.selected is not None:
@@ -34,6 +44,18 @@ class Selection:
             with open(self.output, "w", encoding="utf-8") as f:
                 for item in session.items:
                     f.write(json.dumps(item.nodeid) + "\n")
+        if self.keys_out:
+            # A cold record pass has no manifest yet: derive identities from the
+            # final selection with the same collision rule the planner uses, and
+            # hand them to the ledger plugin. The plugin reads HH_KEYS_FILE on
+            # the first test, which is after this hook.
+            from ..keys import unique_key_map
+            raw = [item.nodeid for item in session.items]
+            km = unique_key_map(raw, "pytest")
+            with open(self.keys_out, "w", encoding="utf-8") as f:
+                for nodeid in raw:
+                    f.write(json.dumps({"raw_id": nodeid, "key": km[nodeid]}) + "\n")
+            os.environ["HH_KEYS_FILE"] = self.keys_out
 
 
 def main(argv=None):
@@ -66,13 +88,18 @@ def main(argv=None):
     # because one directory name was checked first.
     roots = [d for d in ("tests", "test") if os.path.isdir(d)] or ["."]
     if selected is not None and len(selected) <= 400:
-        # Small selection (a cold sample, a hang probe, a resume tail): pass the
+        # Small selection (a hang probe, a resume tail, one test): pass the
         # node ids directly so pytest never imports/collects the rest of the
         # suite. Deselect-after-collect pays the whole collection cost — 2.9 s
         # of a 4.6 s click suite — for 40 tests that take 40 ms.
         rc = pytest.main(opts + list(selected), plugins=[])
         return int(rc)
-    rc = pytest.main(opts + roots, plugins=[Selection(args.collect_out, selected)])
+    # A cold record pass (no test list) discovers identities during its own
+    # collection, so the ledger and the next plan agree on every key.
+    keys_out = (args.ledger + ".keys.jsonl"
+                if selected is None and args.ledger else None)
+    rc = pytest.main(opts + roots,
+                     plugins=[Selection(args.collect_out, selected, keys_out, args.ledger)])
     return int(rc)
 
 

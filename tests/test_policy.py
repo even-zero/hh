@@ -85,11 +85,11 @@ class TestMakePlan(unittest.TestCase):
         self.assertEqual(plan.workers_hint, 2)
         self.assertIn("predicted_wall_s", plan.to_json())
 
-    def test_tiny_suite_degrades_to_record_only(self):
+    def test_tiny_suite_degrades_to_serial_no_sharding(self):
         est = make_est([20.0] * 12)                     # point = 240 ms < 1000 ms
         raw_of = {p.key: p.key for p in est.preds}
         plan = policy.make_plan(est, raw_of, workers=2, checkpoint_dir="/tmp/x")
-        self.assertEqual(plan.operating_level, "record-only")
+        self.assertEqual(plan.operating_level, "tiny")
         self.assertEqual(len(plan.shards), 1)
         self.assertEqual(plan.workers_hint, 1)
 

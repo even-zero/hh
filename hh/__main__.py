@@ -34,6 +34,21 @@ def cmd_plan(args):
     return 0
 
 
+def cmd_discover(args):
+    """Manifest audit only: what the runner can actually see. No execution."""
+    from .tool import collect_manifest
+    meter = Meter()
+    keys, _raw_of, collection_s = collect_manifest(
+        args.root, args.runner, meter, store_root=args.store_root)
+    # one line: the CLI contract (and the benchmark harness) reads the last
+    # stdout line as JSON
+    print(json.dumps({"runner": args.runner, "root": args.root,
+                      "manifest_size": len(keys),
+                      "collection_s": collection_s,
+                      "overhead_ms": round(meter.total_ms, 1)}))
+    return 0
+
+
 def cmd_record(args):
     st = store_mod.Store(args.store_root)
     run_id = st.start_run(args.runner, suite_sig=args.suite_sig)
@@ -136,6 +151,7 @@ def cmd_run(args):
                        log=lambda *a: print(*a, file=sys.stderr))
     print(json.dumps({
         "stats": res["stats"], "ingested": res["ingested"],
+        "complete": res.get("complete"),
         "wall_s": res["wall_s"], "exec_wall_s": res.get("exec_wall_s"),
         "startup_s": res.get("startup_s"), "phases": res.get("phases"),
         "overhead_ms": res["overhead_ms"],
@@ -174,6 +190,11 @@ def main(argv=None):
                    help="finish the last run's remainder (paid work is not re-run)")
     p.add_argument("--out")
     p.set_defaults(fn=cmd_plan)
+
+    p = sub.add_parser("discover")
+    p.add_argument("--root", required=True)
+    p.add_argument("--runner", default="unittest")
+    p.set_defaults(fn=cmd_discover)
 
     p = sub.add_parser("record")
     p.add_argument("--ledger", required=True)

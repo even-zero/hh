@@ -14,6 +14,7 @@ class Shard:
     budget_s: float
     tests: list[dict]          # [{"key", "raw_id", "pred_ms"}]
     quarantine: bool = False   # single-test hard-cutoff shard (hang suspect)
+    full_suite: bool = False   # cold record shard: run everything, no test list
 
 
 @dataclass
@@ -31,14 +32,15 @@ class ExecutionPlan:
     })
     operating_level: str = "full"
     overhead_ms: float = 0.0
-    predicted_wall_s: float = 0.0        # LPT point estimate of wall (max shard load)
+    # None on a cold (record) plan: hh does not predict suites it has never
+    # measured. Measured plans carry an LPT point estimate (max shard load).
+    predicted_wall_s: float | None = None
     # collection/startup paid once per shard attempt; budgets are *execution*
     # budgets, so the executor's clock adds this instead of charging it to tests
     startup_s: float = 0.0
-    predicted_exec_wall_s: float = 0.0   # max shard load, collection excluded
-    # cold-start protocol: run a small stratified sample first, then re-plan
-    sample_phase: dict | None = None
-    manifest_size: int = 0                # tests discovered (sample plans execute a subset)
+    predicted_exec_wall_s: float | None = None   # same, collection excluded
+    manifest_size: int = 0                # tests discovered in this plan
+    measured_tests: int = 0               # tests with their own rows in the store
     resume_ingest: dict | None = None     # rows imported from a killed run before planning
     deadline_decision: dict | None = None  # choose_workers() output when a deadline was given
     est: dict = field(default_factory=dict)
@@ -147,8 +149,10 @@ def make_plan(est: Estimate, raw_of: dict[str, str], *, workers: int = 2,
               startup_s: float = 0.0) -> ExecutionPlan:
     """Build an ExecutionPlan. Operating levels per §8.4 auto-degrade ladder.
 
-    With `deadline_s` set, the number of workers is chosen by choose_workers()
-    and shards are built for that parallelism (CI-deadline hook, §9).
+    Only call this with a *measured* estimate: cold suites go through
+    make_record_plan() instead. With `deadline_s` set, the number of workers is
+    chosen by choose_workers() and shards are built for that parallelism
+    (CI-deadline hook, §9).
 
     `startup_s` is the measured collection/import cost of one runner process;
     it is added to each shard attempt's clock but never to the tests' budget.
@@ -172,7 +176,7 @@ def make_plan(est: Estimate, raw_of: dict[str, str], *, workers: int = 2,
                           tests=[{"key": p.key, "raw_id": raw_of.get(p.key, p.key),
                                   "pred_ms": p.median} for p in est.preds])],
             checkpoint_dir=checkpoint_dir, per_test_cutoff_s=per_test_cutoff_s,
-            operating_level="record-only",
+            operating_level="tiny",
             workers_hint=1, workers_rationale="tiny suite: serial, no sharding",
             predicted_wall_s=round(sum(p.median for p in est.preds) / 1000
                                    + est.runner_overhead_ms / 1000 + startup_s, 3),
@@ -224,42 +228,30 @@ def make_plan(est: Estimate, raw_of: dict[str, str], *, workers: int = 2,
     return plan
 
 
-def make_sample_plan(est: Estimate, keys: list[str], raw_of: dict[str, str], *,
-                     checkpoint_dir: str, per_test_cutoff_s: float = 12.0,
-                     startup_s: float = 0.0, strategy: str = "stratified-file",
-                     iteration: int = 1, budget_cap_s: float = 60.0) -> ExecutionPlan:
-    """Cold-start sample phase: measure a few rows, then re-plan from them.
+def make_record_plan(*, checkpoint_dir: str, per_test_cutoff_s: float = 12.0,
+                     startup_s: float = 0.0, budget_s: float = 30.0) -> ExecutionPlan:
+    """Cold store: do not predict, do not even enumerate. Just record.
 
-    The sample is deliberately cheap and bounded: stratified across files so one
-    slow file cannot dominate, budgeted from priors, and hard-capped. Its only
-    job is to turn ``prior`` estimates into ``measured`` ones — the caller runs
-    it, records the ledger, and plans again (the recursive half of the loop).
+    The shard carries ``full_suite`` instead of a test list, so the runner
+    discovers and executes in the *same* process — the naive invocation plus a
+    ledger. Budget starts at the first rung of the default ladder (30 s) and
+    doubles on timeout, exactly like the naive agent's policy; then it stops.
+    Nothing here is derived from priors; its purpose is to leave measurements
+    behind for the next plan.
     """
-    preds = {p.key: p for p in est.preds}
-    picked = list(dict.fromkeys(k for k in keys if k in preds))[:len(keys)]
-    # keep the deterministic order chosen by the caller (see tool._sample_keys)
-    sample = [{"key": k, "raw_id": raw_of.get(k, k), "pred_ms": preds[k].median}
-              for k in picked]
-    mass_s = sum(t["pred_ms"] for t in sample) / 1000.0
-    budget = max(3.0, min(budget_cap_s, mass_s * 3.0 + 3.0))
-    total = round(mass_s + startup_s, 3)
     return ExecutionPlan(
-        total_budget_s=round(budget, 3),
-        shards=[Shard(budget_s=round(budget, 3), tests=sample)],
+        total_budget_s=round(budget_s, 3),
+        shards=[Shard(budget_s=round(budget_s, 3), tests=[], full_suite=True)],
         checkpoint_dir=checkpoint_dir, per_test_cutoff_s=per_test_cutoff_s,
-        operating_level="sample",
+        operating_level="record",
         workers_hint=1,
-        workers_rationale=(f"cold start: sample {len(sample)}/{est.breakdown.get('n_tests', len(sample))} "
-                           f"tests, then re-plan from measured rows"),
-        predicted_wall_s=total,
+        workers_rationale=("cold store: no measurements yet — recording the suite "
+                           "like a naive run, then planning from the rows"),
+        escalation={"shard_over_budget": "naive_double_then_stop",
+                    "test_cutoff": "censor_and_continue"},
         startup_s=round(startup_s, 3),
-        predicted_exec_wall_s=round(mass_s, 3),
-        sample_phase={"strategy": strategy, "sample_size": len(sample),
-                      "of": est.breakdown.get("n_tests", len(sample)),
-                      "iteration": iteration,
-                      "calibration_before": est.calibration.get("basis"),
-                      "coverage_measured_before": round(est.coverage_measured, 3)},
-        est=_est_summary(est),
+        est={"basis": "cold", "coverage": 0.0,
+             "calibration": {"basis": "cold"}},
     )
 
 
@@ -268,8 +260,8 @@ def _est_summary(est: Estimate) -> dict:
         "p50_s": round(est.p50 / 1000, 3), "p90_s": round(est.p90 / 1000, 3),
         "runner_overhead_ms": est.runner_overhead_ms,
         "p99_s": round(est.p99 / 1000, 3), "coverage": round(est.coverage, 3),
-        "coverage_measured": round(est.coverage_measured, 3),
         "calibration": est.calibration,
+        "measured_tests": len(est.preds) - len(est.unknowns),
         "n_unknown": len(est.unknowns), "breakdown": est.breakdown,
     }
 
@@ -284,6 +276,16 @@ def latest_ledger_dir(root: str) -> str | None:
 
 
 def new_checkpoint_dir(root: str) -> str:
-    d = os.path.join(root, ".hh", "runs", time.strftime("%Y%m%dT%H%M%S"))
+    """Fresh checkpoint dir per call; never share a ledger by accident.
+
+    Timestamps have 1 s resolution, and two runs of a small suite can easily
+    land in the same second — the second run then "resumed" the first one's
+    ledger and executed nothing.
+    """
+    base = os.path.join(root, ".hh", "runs", time.strftime("%Y%m%dT%H%M%S"))
+    d, i = base, 1
+    while os.path.exists(d):
+        i += 1
+        d = f"{base}-{i}"
     os.makedirs(d, exist_ok=True)
     return d

@@ -32,8 +32,11 @@ TOOL_SPEC = {
         "Run a test suite with duration-aware budgeting. Learns per-test "
         "durations from previous runs, so the budget is a measurement, not a "
         "guess; never restarts from zero (finished tests are checkpointed), "
-        "and isolates hanging tests instead of killing the whole run. "
-        "Returns pass/fail plus the measured budget for the next call."
+        "and isolates hanging tests instead of killing the whole run. A store "
+        "with no measurements records the suite like a plain run and makes no "
+        "prediction; the deadline/worker checks therefore apply from the "
+        "second call on. Returns pass/fail plus the measured budget for the "
+        "next call."
     ),
     "parameters": {
         "type": "object",
@@ -88,14 +91,14 @@ def _tree_fingerprint(root: str, runner: str) -> str:
 
 
 def _write_manifest_cache(cache_path: str, root_abs: str, runner: str,
-                          raw_of: dict[str, str], meter: Meter) -> None:
+                          raw_of: dict[str, str], collection_s: float) -> None:
     try:
         os.makedirs(os.path.dirname(cache_path), exist_ok=True)
         tmp = cache_path + ".tmp"
         with open(tmp, "w", encoding="utf-8") as f:
             json.dump({"fingerprint": _tree_fingerprint(root_abs, runner),
                        "root": root_abs, "raw_of": raw_of,
-                       "collection_s": round(meter.spans_ms.get("collect", 0.0) / 1000.0, 3)}, f)
+                       "collection_s": round(collection_s, 3)}, f)
         os.replace(tmp, cache_path)
     except OSError:
         pass
@@ -154,11 +157,32 @@ def collect_manifest(root: str, runner: str, meter: Meter,
                                   capture_output=True, text=True)
             if proc.returncode:
                 raise RuntimeError(f"Mocha collection failed: {(proc.stdout + proc.stderr)[-3000:]}")
-            entries = [json.loads(line) for line in proc.stdout.splitlines() if line.strip()]
+            # The child's stdout is the protocol, but a test tree that prints
+            # while loading (express logs its routes) would otherwise make
+            # discovery crash. Keep every JSON entry; ignore non-protocol noise,
+            # and fail loudly if the noise was all we got.
+            entries, noise = [], 0
+            for line in proc.stdout.splitlines():
+                if not line.strip():
+                    continue
+                try:
+                    row = json.loads(line)
+                except ValueError:
+                    noise += 1
+                    continue
+                if not isinstance(row, dict) or "key" not in row:
+                    noise += 1
+                    continue
+                entries.append(row)
+            if not entries and noise:
+                raise RuntimeError(f"Mocha collection produced no test ids "
+                                   f"({noise} non-protocol lines): "
+                                   f"{proc.stdout[-1500:]}")
         # already normalized+deduped by the adapter; keep raw_id for execution
         raw_of = {e["key"]: e["raw_id"] for e in entries}
         if cache_path:
-            _write_manifest_cache(cache_path, root_abs, runner, raw_of, meter)
+            _write_manifest_cache(cache_path, root_abs, runner, raw_of,
+                                  meter.spans_ms.get("collect", 0.0) / 1000.0)
         return list(raw_of), raw_of, round(meter.spans_ms.get("collect", 0.0) / 1000.0, 3)
     elif runner == "unittest":
         with meter.span("collect"):
@@ -178,84 +202,21 @@ def collect_manifest(root: str, runner: str, meter: Meter,
     # The historical class-agnostic key can collide for inherited test methods.
     # Keep existing store identities for unambiguous tests, but disambiguate
     # collisions deterministically so no runnable test silently disappears.
-    from collections import Counter
-    import hashlib
+    from .keys import unique_key_map
     raw_ids = list(dict.fromkeys(raw_ids))
-    counts = Counter(normalize(runner, raw) for raw in raw_ids)
-    raw_of = {}
-    for raw in raw_ids:
-        key = normalize(runner, raw)
-        if counts[key] > 1:
-            key += " :: collision-" + hashlib.sha1(raw.encode()).hexdigest()[:12]
-        raw_of[key] = raw
+    raw_of = {key: raw for raw, key in unique_key_map(raw_ids, runner).items()}
     if cache_path:
-        _write_manifest_cache(cache_path, root_abs, runner, raw_of, meter)
+        _write_manifest_cache(cache_path, root_abs, runner, raw_of,
+                              meter.spans_ms.get("collect", 0.0) / 1000.0)
     return list(raw_of), raw_of, round(meter.spans_ms.get("collect", 0.0) / 1000.0, 3)
-
-
-SAMPLE_MIN_TESTS = 40          # below this, a full run is cheaper than sampling
-SAMPLE_MAX = 48                # hard cap on rows measured per sampling round
-SAMPLE_FRACTION = 0.02         # rows per round, as a share of the suite
-SAMPLE_TARGET_FRACTION = 0.05  # stop sampling once this share is measured
-SAMPLE_MAX_ITERATIONS = 3      # recursive rounds before the plan is final
-
-
-def _sample_keys(keys: list[str], *, max_n: int = SAMPLE_MAX) -> list[str]:
-    """Deterministic stratified sample: first/middle/last of each file.
-
-    Round-robin over files (sorted) so the sample spreads across the suite
-    rather than clustering in whichever file sorts first. No randomness: the
-    same manifest always yields the same sample, so runs are comparable.
-    """
-    from .keys import file_of
-    by_file: dict[str, list[str]] = {}
-    for k in keys:
-        by_file.setdefault(file_of(k), []).append(k)
-    # Round-robin across files: with a 29-row budget and 40 files, a per-file
-    # block would sample only the first ~10 files — and their (often slower)
-    # tests were then extrapolated to the whole suite. One row per file per
-    # round, at evenly spaced positions, keeps the sample representative.
-    order = sorted(by_file)
-    if len(order) > max_n:
-        # Spread the sample across the *whole* sorted file list. Taking the
-        # first `max_n` files was a silent bias: on click that picked the
-        # alphabetically early (cheap) files and under-predicted the suite by
-        # 42%, because the tail of the suite was never looked at.
-        stride = max(1, len(order) // max_n)
-        order = order[::stride][:max_n]
-    used: dict[str, set[int]] = {f: set() for f in order}
-    picks: list[str] = []
-    round_i = 0
-    while len(picks) < max_n:
-        added = False
-        for f in order:
-            ks = by_file[f]
-            L = len(ks)
-            if len(used[f]) >= L:
-                continue
-            npts = min(3, L)
-            pos = 0 if npts == 1 else round((round_i % npts) * (L - 1) / (npts - 1))
-            for step in range(L):
-                cand = (pos + step) % L
-                if cand not in used[f]:
-                    used[f].add(cand)
-                    picks.append(ks[cand])
-                    added = True
-                    break
-            if len(picks) >= max_n:
-                break
-        if not added:
-            break
-        round_i += 1
-    return picks[:max_n]
 
 
 def _ingest_pending_ledger(store_root: str, runner: str) -> dict:
     """Import ledger rows a killed/unrecorded run left behind (resume inputs).
 
-    Without this, `--resume` estimates from bundled priors even though the
-    killed run already measured most of the suite — the failure mode that made
-    a warm pytest resume plan 183 s for a 4.8 s suite.
+    Without this, `--resume` would plan as if nothing had been measured even
+    though the killed run already recorded most of the suite — the failure mode
+    that made a warm pytest resume plan 183 s for a 4.8 s suite.
     """
     d = policy.latest_ledger_dir(store_root)
     if not d:
@@ -279,128 +240,93 @@ def _ingest_pending_ledger(store_root: str, runner: str) -> dict:
     return {"ingested": n, "ledger": ledger}
 
 
+COLD_RECORD_BUDGET_S = 30.0     # first rung of the default naive ladder
+
+
 def build_plan(root: str, runner: str = "unittest", workers: int = 2,
                cutoff_s: float = 12.0, store_root: str = ".",
                deadline_s: float | None = None,
                max_workers: int | None = None, resume: bool = False,
-               sample: bool = True, manifest_file: str | None = None,
-               startup_s: float | None = None) -> dict:
-    """plan step: estimate from the store, pick budgets/shards, hand back a plan.
+               startup_s: float | None = None,
+               record_budget_s: float = COLD_RECORD_BUDGET_S) -> dict:
+    """plan step: estimate from *measured* rows, pick budgets/shards.
 
-    Cold-start protocol: when no durations are measured yet and the suite is
-    large enough to bother, the plan is a *sample* plan — a few dozen stratified
-    rows — which `execute_plan` runs, records, and then iterates on with a
-    second, measured plan. A warm store never takes this path.
+    Cold-store policy: when this store holds no duration yet, hh does not
+    predict and does not even enumerate the suite. It returns a **record
+    plan** — one full-suite shard that the runner executes exactly like its
+    naive invocation (same single process, same discovery) while the ledger
+    records every duration. The next plan is then a measurement. This is the
+    tool's scope: remove the guesswork from the second run onwards; do not try
+    to solve the first.
     """
     meter = Meter()
     st = store_mod.Store(store_root)
-    if manifest_file and os.path.exists(manifest_file):
-        # Re-plan inside a run: reuse the manifest the first plan discovered.
-        # Collection is the expensive part of planning a large suite, and the
-        # cold-start loop must not pay it once per iteration.
-        keys, raw_of = [], {}
-        with open(manifest_file, encoding="utf-8") as f:
-            for line in f:
-                row = json.loads(line)
-                keys.append(row["key"])
-                raw_of[row["key"]] = row["raw_id"]
-    else:
-        keys, raw_of, collected_s = collect_manifest(root, runner, meter,
-                                                     store_root=store_root)
-        manifest_file = None
-    # collection/startup cost paid once per runner process (pytest/Mocha do the
-    # import + collection before executing anything). Budgets exclude it.
-    startup_s = (collected_s if startup_s is None else float(startup_s))
     resume_info = {"ingested": 0, "ledger": None}
     if resume:
         with meter.span("resume_ingest"):
             resume_info = _ingest_pending_ledger(store_root, runner)
-    with meter.span("estimate"):
-        est = estimator.estimate(keys, st, runner=runner, workers=workers)
-        hangs = set(st.censored_keys(min_count=2))
-        suspects = set(st.censored_keys(min_count=1))
-        for p in est.preds:
-            if p.key in hangs:
-                p.hang_tier = 2
-            elif p.key in suspects:
-                p.hang_tier = 1
+    measured = set(st.agg_map("test"))
+    if not measured:
+        with meter.span("policy"):
+            ckpt = policy.new_checkpoint_dir(store_root)
+            plan = policy.make_record_plan(
+                checkpoint_dir=ckpt, per_test_cutoff_s=cutoff_s,
+                startup_s=float(startup_s or 0.0), budget_s=record_budget_s)
+            if deadline_s is not None:
+                # No measurements ⇒ no feasibility claim. Say so and record.
+                plan.deadline_decision = {
+                    "workers": 1, "feasible": None, "deadline_s": deadline_s,
+                    "predicted_wall_s": None, "max_workers": 1,
+                    "rationale": ("cold store: no measurements yet, so the "
+                                  f"{deadline_s}s deadline cannot be verified. "
+                                  "Recording the suite first; the next call can "
+                                  "plan against the deadline."),
+                }
+        plan.measured_tests = 0
+        plan.overhead_ms = meter.total_ms
+        plan.resume_ingest = resume_info
+        return plan
+
+    keys, raw_of, collected_s = collect_manifest(root, runner, meter,
+                                                 store_root=store_root)
+    # collection/startup cost paid once per runner process (pytest/Mocha do the
+    # import + collection before executing anything). Budgets exclude it.
+    startup_s = (collected_s if startup_s is None else float(startup_s))
     with meter.span("policy"):
         ckpt = (policy.latest_ledger_dir(store_root) if resume else None) \
             or policy.new_checkpoint_dir(store_root)
-        measured = set(st.agg_map("test"))
-        n_sampled = len(measured)
-        target_rows = min(SAMPLE_MIN_TESTS, max(8, int(round(len(keys) * SAMPLE_TARGET_FRACTION))))
-        remaining = [k for k in keys if k not in measured]
-        want_sample = (sample and len(keys) >= SAMPLE_MIN_TESTS
-                       and n_sampled < target_rows and remaining)
-        if want_sample:
-            # One round, sized to the target: sampling in two smaller rounds
-            # paid a second runner startup + re-plan for no extra information
-            # (and on file-heavy suites round 1 could only take one row/file,
-            # so it always fell short and always recurred).
-            target = max(8, min(SAMPLE_MAX, target_rows))
-            sample_keys = _sample_keys(remaining, max_n=target)
-            plan = policy.make_sample_plan(
-                est, sample_keys, raw_of, checkpoint_dir=ckpt,
-                per_test_cutoff_s=cutoff_s, startup_s=startup_s,
-                iteration=1)
-            plan.manifest_size = len(keys)
-            plan.sample_phase["target_rows"] = target_rows
-        else:
-            plan = policy.make_plan(est, raw_of, workers=workers, checkpoint_dir=ckpt,
-                                    per_test_cutoff_s=cutoff_s, deadline_s=deadline_s,
-                                    max_workers=max_workers, startup_s=startup_s)
-            plan.manifest_size = len(keys)
+        overhead = st.runner_overhead_ms(runner)
+        with meter.span("estimate"):
+            est = estimator.estimate(keys, st, runner=runner, workers=workers,
+                                     runner_overhead_ms=overhead)
+            hangs = set(st.censored_keys(min_count=2))
+            suspects = set(st.censored_keys(min_count=1))
+            for p in est.preds:
+                if p.key in hangs:
+                    p.hang_tier = 2
+                elif p.key in suspects:
+                    p.hang_tier = 1
+        plan = policy.make_plan(est, raw_of, workers=workers, checkpoint_dir=ckpt,
+                                per_test_cutoff_s=cutoff_s, deadline_s=deadline_s,
+                                max_workers=max_workers, startup_s=startup_s)
+        plan.manifest_size = len(keys)
+    plan.measured_tests = sum(1 for k in keys if k in measured)
     plan.overhead_ms = meter.total_ms
     plan.resume_ingest = resume_info
-    if plan.sample_phase:
-        # Persist the discovered manifest so the post-sample re-plan is cheap:
-        # it reads this file instead of re-running collection.
-        path = os.path.join(plan.checkpoint_dir, "manifest.jsonl")
-        os.makedirs(plan.checkpoint_dir, exist_ok=True)
-        tmp = path + ".tmp"
-        with open(tmp, "w", encoding="utf-8") as f:
-            for k in keys:
-                f.write(json.dumps({"key": k, "raw_id": raw_of.get(k, k)}) + "\n")
-        os.replace(tmp, path)
-        plan.sample_phase["manifest_file"] = path
-        plan.sample_phase["startup_s"] = startup_s
-        plan.sample_phase["calibration"] = est.calibration
     return plan
-
-
-_SUM_KEYS = ("attempts", "wall_s", "compute_s", "censored", "shard_failures",
-             "resumed", "resumed_ms", "preserved_tests", "preserved_ms",
-             "startup_s", "startup_attempts", "censored_wait_s",
-             "calibration_tests", "calibration_ms")
-
-
-def _merge_stats(dst: dict | None, src: dict) -> dict:
-    out = dict(dst or {})
-    for k in _SUM_KEYS:
-        if k in src or k in out:
-            out[k] = float(out.get(k, 0.0)) + float(src.get(k, 0.0) or 0.0)
-    for k, v in src.items():
-        if k not in _SUM_KEYS:
-            out[k] = v
-    return out
 
 
 def execute_plan(plan: dict, root: str, runner: str = "unittest",
                  adapter: str | None = None,
                  store_root: str = ".", suite_id: str = "run",
                  log=lambda *a: None, caller_limit_s: float | None = None,
-                 job: str | None = None, max_sample_iterations: int = 2) -> dict:
+                 job: str | None = None) -> dict:
     """execute + record step: checkpointed executor, then ingest into the store.
 
-    Cold-start recursion: a plan carrying ``sample_phase`` is executed, its
-    ledger is ingested, and a *new* plan is built from those measured rows
-    before the remainder runs. One sample (<=48 rows) turns bundled priors into
-    measured per-file rates; a second iteration is allowed if the store still
-    has no rows (e.g. the sample was killed early), then the loop stops.
-
-    Rows measured by this call's own sample are calibration *cost*, not resume
-    savings: they are removed from the resume credit and reported separately.
+    One plan, one pass. A cold plan (``operating_level == "record"``) runs the
+    whole suite under naive-style budgets and records it; a measured plan runs
+    the shards hh computed. Either way every finished test lands in the store,
+    which is what the next plan reads.
     """
     from .executor import execute
     meter = Meter()
@@ -410,99 +336,68 @@ def execute_plan(plan: dict, root: str, runner: str = "unittest",
                           "node": "hh.adapters.mocha_stream"}[runner]
     root_abs = os.path.abspath(root)
     t0 = time.perf_counter()
-    phases: list[dict] = []
-    stats: dict | None = None
-    call_keys: set[str] = set()
-    plan_ms_total = float(plan.get("overhead_ms", 0.0) or 0.0)
-    cur = plan
-    it = 0
-    ledger = os.path.join(cur["checkpoint_dir"], "ledger.jsonl")
-    while True:
-        it += 1
-        before = _done_map_path(ledger)
-        phase_stats = execute(cur, root_abs, adapter=adapter, log=log)
-        after = _done_map_path(ledger)
-        new_here = set(after) - set(before)
-        # resume credit earned earlier *in this same call* is calibration cost
-        own = set(before) & call_keys
-        if own:
-            own_ms = sum(before[k] for k in own)
-            phase_stats["resumed"] = max(0, int(phase_stats.get("resumed", 0)) - len(own))
-            phase_stats["resumed_ms"] = max(0.0, float(phase_stats.get("resumed_ms", 0.0)) - own_ms)
-            phase_stats["calibration_tests"] = len(own)
-            phase_stats["calibration_ms"] = own_ms
-        call_keys |= new_here
-        run_id = st.start_run(runner, suite_sig=None)
-        ctx = st.ctx_id(workers=cur.get("workers_hint") or 1)
-        marker = os.path.join(cur["checkpoint_dir"], "ledger.consumed")
-        offset = 0
-        if os.path.exists(marker):
-            with open(marker, encoding="utf-8") as f:
-                offset = int(f.read() or 0)
-        with meter.span("ingest"):
-            n = st.ingest_ledger(ledger, run_id, ctx, runner, offset=offset)
-            st.refresh_aggregates()
+    ledger = os.path.join(plan["checkpoint_dir"], "ledger.jsonl")
+    before = _done_map_path(ledger)
+    phase_stats = execute(plan, root_abs, adapter=adapter, log=log)
+    after = _done_map_path(ledger)
+    new_here = set(after) - set(before)
+    new_ms = sum(after[k] for k in new_here)
+
+    run_id = st.start_run(runner, suite_sig=None)
+    ctx = st.ctx_id(workers=plan.get("workers_hint") or 1)
+    marker = os.path.join(plan["checkpoint_dir"], "ledger.consumed")
+    offset = 0
+    if os.path.exists(marker):
+        with open(marker, encoding="utf-8") as f:
+            offset = int(f.read() or 0)
+    with meter.span("ingest"):
+        n = st.ingest_ledger(ledger, run_id, ctx, runner, offset=offset)
+        st.refresh_aggregates()
+    if os.path.exists(ledger):
         with open(marker, "w", encoding="utf-8") as f:
             f.write(str(os.path.getsize(ledger)))
-        st.finish_run(run_id, total_ms=phase_stats["wall_s"] * 1000,
-                      wall_ms=phase_stats["wall_s"] * 1000,
-                      collection_ms=float(phase_stats.get("startup_s", 0.0) or 0.0) * 1000.0)
-        stats = _merge_stats(stats, phase_stats)
-        phases.append({"phase": ("sample" if cur.get("sample_phase") else "run"),
-                       "iteration": it, "tests_in_plan": _n_tests(cur),
-                       "tests_executed": len(new_here),
-                       "wall_s": round(phase_stats["wall_s"], 3),
-                       "startup_s": round(float(phase_stats.get("startup_s", 0.0) or 0.0), 3),
-                       "ingested": n, "attempts": phase_stats.get("attempts", 0),
-                       "censored": phase_stats.get("censored", 0),
-                       "plan_ms": round(float(cur.get("overhead_ms", 0.0) or 0.0), 1),
-                       "operating_level": cur.get("operating_level"),
-                       "predicted_exec_wall_s": cur.get("predicted_exec_wall_s")})
-        if not cur.get("sample_phase"):
-            break
-        n_sampled = len(call_keys)
-        sample_target = int((cur.get("sample_phase") or {}).get("target_rows")
-                            or SAMPLE_MIN_TESTS)
-        if n_sampled < sample_target and it < max_sample_iterations:
-            log(f"  cold sample: only {n_sampled} rows measured — sampling again")
-            nxt = build_plan(root, runner=runner,
-                             workers=max(1, int(cur.get("workers_hint") or 2)),
-                             cutoff_s=cur.get("per_test_cutoff_s", 12.0),
-                             store_root=store_root, resume=True, sample=True,
-                             manifest_file=_manifest_of(cur),
-                             startup_s=cur.get("startup_s"))
-            nxt = json.loads(nxt.to_json())
-            plan_ms_total += float(nxt.get("overhead_ms", 0.0) or 0.0)
-            if nxt.get("sample_phase"):
-                nxt["sample_phase"]["iteration"] = it + 1
-                phases[-1]["replanned"] = "resample"
-            cur = nxt
-            continue
-        log(f"  cold sample: {n_sampled} rows measured — re-planning from them")
-        nxt = build_plan(root, runner=runner,
-                         workers=max(1, int(cur.get("workers_hint") or 2)),
-                         cutoff_s=cur.get("per_test_cutoff_s", 12.0),
-                         store_root=store_root, resume=True, sample=False,
-                         manifest_file=_manifest_of(cur),
-                         startup_s=cur.get("startup_s"))
-        nxt = json.loads(nxt.to_json())
-        plan_ms_total += float(nxt.get("overhead_ms", 0.0) or 0.0)
-        phases[-1]["replanned"] = {
-            "coverage_measured": (nxt.get("est") or {}).get("coverage_measured"),
-            "calibration": (nxt.get("est") or {}).get("calibration"),
-            "predicted_exec_wall_s": nxt.get("predicted_exec_wall_s"),
-            "predicted_wall_s": nxt.get("predicted_wall_s"),
-            "operating_level": nxt.get("operating_level"),
-            "startup_s": nxt.get("startup_s"),
-        }
-        cur = nxt
+    complete = _run_complete(phase_stats, plan.get("operating_level") == "record")
+    if (plan.get("operating_level") == "record" and complete):
+        # The ledger of a completed record pass *is* the manifest for this tree:
+        # cache it (fingerprint-checked) so the next plan skips discovery
+        # entirely instead of paying pytest/Mocha collection a second time.
+        raw_of: dict[str, str] = {}
+        with open(ledger, encoding="utf-8") as f:
+            for line in f:
+                try:
+                    row = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if row.get("type") == "end" and row.get("key"):
+                    raw_of[row["key"]] = row.get("raw_id", row["key"])
+        if raw_of:
+            _write_manifest_cache(
+                os.path.join(store_root, ".hh", f"manifest-cache-{runner}.json"),
+                root_abs, runner, raw_of,
+                float(phase_stats.get("startup_s", 0.0) or 0.0))
+    # total_ms is Σ executed test durations; wall_ms is the whole attempt. The
+    # difference (minus collection) is the runner bookkeeping the next plan
+    # budgets for (`Store.runner_overhead_ms`).
+    st.finish_run(run_id, total_ms=new_ms,
+                  wall_ms=phase_stats["wall_s"] * 1000,
+                  collection_ms=float(phase_stats.get("startup_s", 0.0) or 0.0) * 1000.0)
 
     wall = time.perf_counter() - t0
-    stats = dict(stats or {})
+    stats = dict(phase_stats)
+    phase = "record" if plan.get("operating_level") == "record" else "run"
+    phases = [{"phase": phase, "iteration": 1, "tests_in_plan": _n_tests(plan),
+               "tests_executed": len(new_here),
+               "wall_s": round(stats["wall_s"], 3),
+               "startup_s": round(float(stats.get("startup_s", 0.0) or 0.0), 3),
+               "ingested": n, "attempts": stats.get("attempts", 0),
+               "censored": stats.get("censored", 0),
+               "plan_ms": round(float(plan.get("overhead_ms", 0.0) or 0.0), 1),
+               "operating_level": plan.get("operating_level"),
+               "predicted_exec_wall_s": plan.get("predicted_exec_wall_s")}]
     stats["phases"] = phases
     stats["startup_s"] = round(float(stats.get("startup_s", 0.0) or 0.0), 3)
     stats["exec_wall_s"] = round(max(0.0, wall - stats["startup_s"]), 3)
-    oh = round(meter.total_ms + plan_ms_total, 3)
+    oh = round(meter.total_ms + float(plan.get("overhead_ms", 0.0) or 0.0), 3)
     rec = {"ts": time.time(), "policy": "hh-full", "suite_id": suite_id,
            "attempt": 1, "budget_s": plan.get("total_budget_s"), "outcome": "ok",
            "wall_ms": round(wall * 1000, 1), "wasted_ms": 0.0, "overhead_ms": oh}
@@ -516,15 +411,26 @@ def execute_plan(plan: dict, root: str, runner: str = "unittest",
         censored_wait_s=float(stats.get("censored_wait_s", 0.0) or 0.0),
         cutoff_s=float(plan.get("per_test_cutoff_s", 12.0)))
     savings.record(store_root, job=job, suite_id=suite_id, lines=lines)
-    return {"stats": stats, "ingested": len(call_keys), "wall_s": round(wall, 3),
+    return {"stats": stats, "complete": complete,
+            "ingested": len(new_here), "wall_s": round(wall, 3),
             "exec_wall_s": stats["exec_wall_s"], "startup_s": stats["startup_s"],
             "overhead_ms": oh, "run_id": run_id, "ledger": ledger,
-            "phases": phases, "plan_used": cur,
+            "phases": phases, "plan_used": plan,
             "savings": {"lines": lines, "notes": notes}}
 
 
-def _manifest_of(plan: dict) -> str | None:
-    return (plan.get("sample_phase") or {}).get("manifest_file")
+def _run_complete(stats: dict, record_pass: bool) -> bool:
+    """Did this pass finish the work it was given?
+
+    A record pass must have written its suite-completion marker; any pass with
+    a dead shard or an unfinished record ladder is *not* complete — no manifest
+    cache is sealed from it, and the payload says so instead of pretending.
+    """
+    if stats.get("shard_failures") or stats.get("incomplete"):
+        return False
+    if record_pass:
+        return bool(stats.get("suite_complete"))
+    return True
 
 
 def _n_tests(plan: dict) -> int:
@@ -555,7 +461,14 @@ def run_tests(root: str, runner: str = "unittest", workers: int = 2,
 
     suite_name = os.path.basename(os.path.abspath(root))
     dec = plan.get("deadline_decision")
-    if dec is not None and not dec["feasible"] and not force:
+    record_pass = plan.get("operating_level") == "record"
+    # A cold store has no measurements, so hh cannot refuse or accept a
+    # deadline on evidence. It records the suite (naive behaviour) and the
+    # caller gets an honest note instead of a fabricated feasibility answer.
+    deadline_note = None
+    if record_pass and dec is not None:
+        deadline_note = dec.get("rationale")
+    if dec is not None and dec.get("feasible") is False and not force:
         rl = savings.refusal_lines(
             f"best-effort wall {dec['predicted_wall_s']}s > deadline {deadline_s}s",
             deadline_s)
@@ -573,7 +486,8 @@ def run_tests(root: str, runner: str = "unittest", workers: int = 2,
             "cost_breakdown_ms": {"plan": round(plan["overhead_ms"], 1)},
         }
 
-    if budget_s is not None and deadline_s is None and planned > budget_s and not force:
+    if (budget_s is not None and deadline_s is None and planned > budget_s
+            and not force and not record_pass):
         n_tests = sum(len(s["tests"]) for s in plan["shards"])
         rl = savings.refusal_lines(
             f"declared bound {planned:.1f}s > caller budget {budget_s}s", budget_s)
@@ -613,12 +527,23 @@ def run_tests(root: str, runner: str = "unittest", workers: int = 2,
     # coverage after this run = manifest keys now present in the store
     st = store_mod.Store(store_root)
     agg = st.agg_map("test")
-    n_manifest = len({t["key"] for s in plan["shards"] for t in s["tests"]})
-    known_after = sum(1 for s in plan["shards"] for t in s["tests"] if t["key"] in agg)
+    if record_pass:
+        # A record plan has no test list: the ledger it just produced is the
+        # manifest, and every key on it is now measured.
+        run_keys = set(_done_map_path(res["ledger"]))
+        n_manifest = len(run_keys)
+        known_after = sum(1 for k in run_keys if k in agg)
+    else:
+        n_manifest = len({t["key"] for s in plan["shards"] for t in s["tests"]})
+        known_after = sum(1 for s in plan["shards"] for t in s["tests"] if t["key"] in agg)
 
     st_stats = res["stats"]
     if st_stats.get("attempts", 0) == 0 and st_stats.get("resumed", 0) > 0:
         status = "up_to_date"          # resume found everything already paid for
+    elif st_stats.get("incomplete"):
+        # cold record pass hit the naive ladder's ceiling: partial data, and
+        # the caller must be told so (a naive run would simply have given up)
+        status = "incomplete"
     elif st_stats.get("shard_failures"):
         # an adapter that dies before running its tests must never look like a
         # green run: the missing tests were force-marked "error", not executed
@@ -633,7 +558,9 @@ def run_tests(root: str, runner: str = "unittest", workers: int = 2,
                                     res["savings"]["notes"], res["wall_s"],
                                     overhead_s=res["overhead_ms"] / 1000.0),
         "resumed_tests": int(st_stats.get("resumed", 0)),
-        "sampled_tests": int(st_stats.get("calibration_tests", 0) or 0),
+        "operating_level": plan.get("operating_level"),
+        "record_pass": record_pass,
+        "deadline_note": deadline_note,
         "wall_s": res["wall_s"],
         "exec_wall_s": res.get("exec_wall_s"),
         "startup_s": res.get("startup_s"),
@@ -648,6 +575,7 @@ def run_tests(root: str, runner: str = "unittest", workers: int = 2,
                     "quarantine": bool(s.get("quarantine"))} for s in plan["shards"]],
         "executed": {"attempts": res["stats"]["attempts"],
                      "censored": res["stats"]["censored"],
+                     "incomplete": res["stats"].get("incomplete", 0),
                      "shard_failures": res["stats"]["shard_failures"]},
         "shard_errors": res["stats"].get("errors", []),
         "results": {"ingested": res["ingested"], "failed": fails[:20],
@@ -660,9 +588,14 @@ def run_tests(root: str, runner: str = "unittest", workers: int = 2,
         "cost_breakdown_ms": {"plan_overhead": round(plan["overhead_ms"], 1),
                               "ingest_overhead": round(res["overhead_ms"] - plan["overhead_ms"], 1),
                               "total_overhead": res["overhead_ms"]},
-        "next_call_hint": ("Durations are now measured for "
-                           f"{known_after}/{n_manifest} tests — the next call's "
-                           "budget will be a measurement."),
+        "next_call_hint": (
+            (f"Cold store: this pass recorded {known_after}/{n_manifest} tests "
+             "without predicting anything. The next call plans from these "
+             "measurements.")
+            if record_pass or cov_before == 0.0 else
+            ("Durations are now measured for "
+             f"{known_after}/{n_manifest} tests — the next call's budget will "
+             "be a measurement.")),
         "total_tool_latency_s": round(time.perf_counter() - t_start, 3),
     }
 

@@ -264,10 +264,24 @@ EWMA (α ≈ 0.3); `content_hash` change ⇒ immediate drop to T1; incremental a
 refresh after each run (raw rows kept for re-tuning); winsorize / MAD filter so one run
 on a loaded box can't double estimates.
 
-### 7.8 Cold start
+### 7.8 Cold start — record, don't predict
 
-Bundled per-runner priors (order-of-magnitude constants); first runs are
-conservative-budget + record-everything; after ~3 runs per file T0–T3 dominate.
+> **Status (2026-10-20): the sampling/prior design below was removed.** It solved a
+> problem hh does not have. A cold store now produces a *record plan*: one full-suite
+> shard, no test list, the runner's own discovery in a single process, no predicted
+> wall time, no feasibility claim, no deadline refusal. The run is the naive
+> invocation plus a ledger, under the naive budget ladder (30 s → 60 s → 120 s, then
+> give up). Its only product is measurement: the finished ledger becomes the
+> fingerprint-checked manifest cache and the durations the *next* plan uses. A pass
+> that did not reach its suite-completion marker never seals that cache.
+
+What was removed: a stratified sample plan, a measure→re-plan recursion, bundled
+per-runner priors, a cold-safety factor and `coverage_measured`. None of it is
+reachable any more; the cold path does not import them.
+
+What replaces the old T5 prior tier once a store has *some* rows: a test with no
+rows of its own falls back to its file's mean, then the suite mean, then 0.0 ms with a
+wide `UNMEASURED_SIGMA_LOG` — a measured neighbourhood, not a bundled constant.
 
 ---
 
@@ -347,12 +361,15 @@ gated net-positive guarantee** — falsifiable numbers, not vibes.
 |---|---|---|---|
 | L0 full | plan + shards + ledger + capture | `C_tda` as above | unknowns>0, high variance, large suite |
 | L1 light | cached plan, no sharding, buffered capture | ~10 µs/test + 5 ms | stable suite_sig, fits budget comfortably |
-| L2 record-only | capture only (rows for the future) | ~20 µs/test | benefit/overhead ratio unfavorable |
+| L2 tiny | capture only (rows for the future) | ~20 µs/test | benefit/overhead ratio unfavorable |
 | L3 off | nothing | 0 | micro-suites (< 1 s), `--no-hh`, or ratio still bad at L2 |
 
 The ladder only ever moves *toward* cheaper. L2 is the net-positive floor: it preserves
 learning at trivial cost; L3 exists for the pathological tail so the tool can never be
 net-negative by more than the metered, capped amount.
+
+A **cold store is not a ladder level**: it is the record pass described in §7.8 —
+outside the ladder by construction, because there is nothing to degrade *from* yet.
 
 ### 8.5 Falsifiability & regression tests
 
@@ -379,7 +396,7 @@ class ExecutionPlan:
     deadline_decision: dict | None # set when a CI deadline drove the W choice
     workers_rationale: str | None  # e.g. "CV_shard 0.31 → 2 workers optimal"
     escalation: EscalationLadder
-    operating_level: str           # "full"|"light"|"record-only" (§8.4)
+    operating_level: str           # "full"|"light"|"tiny" (§8.4) or "record" (cold, §7.8)
     overhead_ms: float             # self-metered, Law 4
 ```
 

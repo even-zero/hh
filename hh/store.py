@@ -86,6 +86,31 @@ class Store:
         )
         self.db.commit()
 
+    def runner_overhead_ms(self, runner: str, limit: int = 5) -> float:
+        """Measured per-test runner bookkeeping (framework plumbing).
+
+        For each recent completed run: (wall − collection − Σ test durations) /
+        number of tests recorded by that run; median over the last `limit`.
+        Returns 0.0 when the store has no completed run — a cold store gets no
+        guess, it gets a record pass.
+        """
+        rows = self.db.execute(
+            "SELECT r.id, r.wall_ms, COALESCE(r.collection_ms, 0.0),"
+            " COUNT(o.id), SUM(o.duration_ms)"
+            " FROM runs r JOIN observations o ON o.run_id = r.id"
+            " WHERE r.runner=? AND r.wall_ms > 0 AND r.collection_ms IS NOT NULL"
+            " GROUP BY r.id ORDER BY r.id DESC LIMIT ?", (runner, limit)).fetchall()
+        vals = []
+        for _id, wall, coll, n, total in rows:
+            if not n:
+                continue
+            over = ((wall or 0.0) - (coll or 0.0) - (total or 0.0)) / n
+            vals.append(max(0.0, over))
+        if not vals:
+            return 0.0
+        vals.sort()
+        return round(vals[len(vals) // 2], 3)
+
     def ctx_id(self, workers: int = 1, runner_ver: str | None = None) -> int:
         fp = machine_fp()
         row = self.db.execute(
@@ -124,6 +149,10 @@ class Store:
         from .keys import file_of, name_of
 
         n = 0
+        if not os.path.exists(ledger_path):
+            # An adapter that died before its first row leaves no ledger. That
+            # is a shard failure the caller reports, not an ingest crash.
+            return 0
         with open(ledger_path, "r", encoding="utf-8") as f:
             if offset:
                 f.seek(offset)

@@ -141,30 +141,33 @@ Common flags: `--store-root DIR` (default `.`), `--runner unittest|pytest|node`,
                                      next plan is a measurement <─────────┘
 ```
 
-1. **Estimate, don't guess.** Per-test durations come from previous runs in a
-   per-repo store (`.hh/`), fuzzy-matched through tiers: exact key → file →
-   sibling → runner prior. Cold, it uses bundled priors and says so
-   (`coverage: 0.0, n_unknown: 108`); after one run the same suite is 100 %
-   covered and the budget is a measurement (4.2 % MAPE measured; prediction vs
-   actual wall was within 2.8 % across worker counts).
-2. **Budget = bound, not point.** The plan reserves `p90`-style safety, and
+1. **Cold: record, don't guess.** An empty store gets a *record plan*: one
+   full-suite shard, no test list, the runner's own discovery in one process,
+   the naive budget ladder (30 s → 60 s → 120 s), `predicted_wall_s: null`, and
+   no feasibility claim. It is the naive invocation plus a ledger — that is the
+   whole scope of a first run.
+2. **Warm: estimate from your own rows.** Per-test durations come from previous
+   runs in a per-repo store (`.hh/`): exact key → file mean → suite mean → 0.0 ms
+   with a wide sigma. No bundled priors and no sampling; the first record pass's
+   ledger is also cached as the manifest, so the next plan needs no second
+   discovery.
+3. **Budget = bound, not point.** The plan reserves `p90`-style safety, and
    clamps it (`≤ min(7200 s, test_mass × 6 + 30 s)`) so a censored tail can never
    reserve a week (a real bug we hit and fixed).
-3. **Shards, sized to workers.** Longest-predicted-first bin packing; the plan
+4. **Shards, sized to workers.** Longest-predicted-first bin packing; the plan
    publishes `predicted_wall_s` (the makespan point estimate) so the caller can
    check the promise afterwards. `--deadline` picks the _smallest_ worker count
    that fits — fewer workers means less CI contention.
-4. **Execution is checkpointed.** Every finished test lands in an append-only
+5. **Execution is checkpointed.** Every finished test lands in an append-only
    ledger (flush per row, no fsync — survives SIGKILL at ~10 µs/row). When a
    shard exceeds its budget, the process is extended and resumes the remainder;
    finished tests are never re-run. `--resume` does the same across calls.
-5. **Hangs are quarantined.** A test that censors twice is probed in isolation at
+6. **Hangs are quarantined.** A test that censors twice is probed in isolation at
    a 2 s cutoff; its estimate is treated as a lower bound and it is reported, not
    swallowed.
-6. **Auto-degrade.** Tiny suites (`< 1 s` of test mass) get the _record-only_
-   path: one process, no sharding, no checkpoint machinery — measured overhead
-   ~25 ms.
-7. **Report the utility.** Every run writes a receipt; `hh savings` totals it.
+7. **Auto-degrade.** Tiny suites (`< 1 s` of test mass) get the _tiny_ path:
+   one process, no sharding, no checkpoint machinery — measured overhead ~25 ms.
+8. **Report the utility.** Every run writes a receipt; `hh savings` totals it.
 
 Design docs: [ARCHITECTURE.md](ARCHITECTURE.md) (the spec, including the
 measured failure modes that shaped it), [EXPERIMENTS.md](EXPERIMENTS.md) (the lab

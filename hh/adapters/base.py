@@ -34,6 +34,17 @@ def start_row(ledger: str, key: str, raw_id: str) -> None:
     append_row(ledger, {"type": "start", "key": key, "raw_id": raw_id, "ts": time.time()})
 
 
+def suite_end_row(ledger: str, tests: int) -> None:
+    """Marker: this process finished the suite it was asked to run.
+
+    Written after the runner loop returns (including with failing tests) and
+    never on a kill/crash. A cold record pass seals the manifest cache only if
+    this marker is present, so a half-finished suite can never become the
+    "complete" test list that the next plan trusts.
+    """
+    append_row(ledger, {"type": "suite_end", "tests": int(tests), "ts": time.time()})
+
+
 def end_row(ledger: str, key: str, raw_id: str, status: str, duration_ms: float,
             censored: bool = False) -> None:
     append_row(ledger, {

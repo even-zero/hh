@@ -92,19 +92,28 @@ def scenario_probe(repo: dict) -> dict:
     shutil.rmtree(store, ignore_errors=True)
     plan_path = os.path.join(config.logdir(repo["id"]), f"{repo['id']}_probe_plan.json")
     env = config.env_for(repo)
+    # The probe is a *discovery* audit, not a planning run: a cold store now
+    # records without enumerating, so read the manifest from `hh discover`.
+    disc, _, _ = harness.run_and_save(
+        HH + ["--store-root", store, "discover", "--root", root, "--runner", runner],
+        cwd=config.repo_dir(repo), env=env, repo=repo["id"],
+        scenario="probe", arm="hh", attempt=1, kind="discover-probe",
+        budget_s=180, log_name=f"{repo['id']}_probe_discover.log")
     cmd = HH + ["--store-root", store, "plan", "--root", root,
                 "--runner", runner, "--workers", "1", "--out", plan_path]
     harness.run_and_save(cmd, cwd=config.repo_dir(repo), env=env, repo=repo["id"],
                          scenario="probe", arm="hh", attempt=1, kind="plan-probe",
                          budget_s=180, log_name=f"{repo['id']}_probe_stdout.log")
     d = json.load(open(plan_path))
-    discovered = d.get("manifest_size") or sum(len(s["tests"]) for s in d["shards"])
+    discovered = (disc or {}).get("manifest_size") or d.get("manifest_size") \
+        or sum(len(s["tests"]) for s in d["shards"])
     harness.now_record(repo=repo["id"], scenario="probe", arm="hh", attempt=1,
                        kind="probe-result", runner=runner, root=root,
                        discovered=discovered, operating_level=d["operating_level"],
                        coverage=d.get("est", {}).get("coverage"),
+                       collection_s=(disc or {}).get("collection_s"),
                        plan_overhead_ms=d.get("overhead_ms"),
-                       plan=plan_path)
+                       plan=plan_path, level=d.get("operating_level"))
     return {"discovered": discovered, "operating_level": d["operating_level"]}
 
 
@@ -154,6 +163,20 @@ def _clean_exec(repo: dict) -> None:
                              cwd=config.repo_dir(repo), env=env, repo=repo["id"],
                              scenario="clean", arm="hh", attempt=1, kind=f"plan-{phase}",
                              budget_s=300)
+        with open(plan_path, encoding="utf-8") as f:
+            plan_doc = json.load(f)
+        level = plan_doc.get("operating_level")
+        if phase == "cold" and level != "record":
+            raise RuntimeError(f"{repo['id']}: a cold store produced a "
+                               f"{level!r} plan; it must record, not predict")
+        if phase == "warm" and level == "record":
+            raise RuntimeError(f"{repo['id']}: the warm store still has no "
+                               "measurements — cold record pass failed")
+        harness.now_record(repo=repo["id"], scenario="clean", arm="hh", attempt=1,
+                           kind=f"plan-{phase}-level", level=level,
+                           measured_tests=plan_doc.get("measured_tests"),
+                           predicted_wall_s=plan_doc.get("predicted_wall_s"),
+                           manifest=plan_doc.get("manifest_size"))
         run, wall, _ = harness.run_and_save(
             HH + ["--store-root", store, "run", "--plan", plan_path, "--root", root,
                   "--runner", repo["runner"], "--suite-id", f"{repo['id']}-clean-{phase}"],
@@ -179,6 +202,7 @@ def _clean_exec(repo: dict) -> None:
                                phases=run.get("phases"),
                                predicted_exec_wall_s=run.get("predicted_exec_wall_s"),
                                stats=run.get("stats"), ingested=run.get("ingested"),
+                               level=level, complete=run.get("complete"),
                                receipt=run.get("time_saved", {}).get("this_call_s"),
                                net_s=run.get("time_saved", {}).get("net_s"))
 

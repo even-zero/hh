@@ -13,6 +13,7 @@ import html
 import json
 import math
 import os
+import statistics
 
 from . import config
 
@@ -123,6 +124,20 @@ def adapt(R: dict) -> dict:
         A["hang_ingested"] = next((r["ingested"] for r in h["runs"] if r.get("ingested")), 0)
         A["hang_receipt"] = next((r["receipt_s"] for r in reversed(h["runs"]) if r.get("receipt_s")), None)
         A["hang_quants"] = [ (h.get(f"plan{i}") or {}).get("quarantine") for i in (1, 2, 3) ]
+
+    # cold pass = record-only: the success condition is parity with naive, and
+    # it holds (or not) per exec lane — a single noisy pass must not become the
+    # headline, so the KPI is the median over the lanes.
+    A["record"] = A["runs"].get("record") or {}
+    A["record_all"] = {
+        rid: (R_runs.get(rid) or {}).get("record") or {}
+        for rid, r in R.get("repos", {}).items()
+        if r.get("lane", "").endswith("_exec")}
+    A["record_all"] = {k: v for k, v in A["record_all"].items()
+                       if v.get("delta_pct") is not None}
+    if A["record_all"]:
+        A["record_delta"] = round(statistics.median(
+            v["delta_pct"] for v in A["record_all"].values()), 2)
 
     # prediction errors
     A["pred_errs"] = {}
@@ -409,8 +424,19 @@ def page(A: dict, charts: list[str]) -> str:
     if A["exec"] and A.get("res_repaid"):
         kpis.append(kpi("re-paid compute, mid-suite kill",
                         f"0s vs {fmt(A['res_repaid'])}s", f"hh resume vs naive restart ({A['exec_disp']})", C["hh"]))
-    kpis.append(kpi("manifest coverage, pytest+JS lanes",
-                    f"0 of {A['blind_tests']:,}", f"{A['blind_repos']} repos fully blind — the headline gap", C["waste"]))
+    if A.get("record_delta") is not None:
+        kpis.append(kpi("cold pass vs naive", f"{A['record_delta']:+.1f}%",
+                        f"median of {len(A['record_all'])} exec lanes · "
+                        "no prediction, no shard shaping", C["ok"]))
+    if A["compat"]:
+        kpis.append(kpi("cold plans that predicted",
+                        f"0 of {len(A['compat'])}",
+                        "cold store ⇒ record plan: no wall estimate, no deadline claim",
+                        C["hh"]))
+    if A["blind_repos"]:
+        kpis.append(kpi("manifest coverage, pytest+JS lanes",
+                        f"{A['blind_tests']:,} invisible",
+                        f"{A['blind_repos']} repos fully blind", C["waste"]))
     if A.get("hang"):
         kpis.append(kpi("hang: info gained",
                         f"{fmt(A['hang_naive_total'])}s ↔ {fmt(A['hang_walls'][-1],1)}s",

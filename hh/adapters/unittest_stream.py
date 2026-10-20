@@ -16,8 +16,8 @@ import sys
 import time
 import unittest
 
-from .base import end_row, start_row
-from ..keys import normalize
+from .base import end_row, start_row, suite_end_row
+from ..keys import normalize, unique_key_map
 
 RUNNER = "unittest"
 PATTERNS = ("test_*.py", "*_test.py")
@@ -283,6 +283,7 @@ def main(argv=None):
     root = os.path.abspath(args.root)
     sys.path.insert(0, root)
     loader = unittest.defaultTestLoader
+    keys: dict[str, str] = {}
     if args.tests_file:
         import json
         with open(args.tests_file, encoding="utf-8") as f:
@@ -292,18 +293,22 @@ def main(argv=None):
     if args.tests:
         suite = unittest.TestSuite(resolve_many(root, args.tests))
     else:
-        # default (no selection file): the full recursive universe
+        # default (no selection file): the full recursive universe. Identities
+        # come from the same collision-aware map the planner uses, so a record
+        # pass and the next plan can never disagree about a key.
         ids, _errors = discover_ids(root)
+        keys = unique_key_map(ids, RUNNER)
         suite = unittest.TestSuite(resolve_many(root, ids))
 
     from ..executor import _done_keys  # reuse ledger reader
     done = _done_keys(args.ledger)
-    key_of = (lambda t: keys.get(t.id(), normalize(RUNNER, t.id()))) if args.tests_file else (lambda t: normalize(RUNNER, t.id()))
+    key_of = lambda t: keys.get(t.id(), normalize(RUNNER, t.id()))
     tests = [t for t in _flatten(suite) if key_of(t) not in done]
 
     runner = unittest.TextTestRunner(verbosity=0, stream=open(os.devnull, "w"),
-                                     resultclass=lambda *a, **k: LedgerResult(args.ledger, keys if args.tests_file else None, *a, **k))
+                                     resultclass=lambda *a, **k: LedgerResult(args.ledger, keys, *a, **k))
     result = runner.run(unittest.TestSuite(tests))
+    suite_end_row(args.ledger, result.testsRun)
     return 0 if result.wasSuccessful() or result.failures or result.errors else 1
 
 

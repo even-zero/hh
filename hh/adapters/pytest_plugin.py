@@ -33,7 +33,10 @@ def _key(nodeid):
                          for entry in [json.loads(line)]}
         else:
             _KEYS = {}
-    return _KEYS.get(nodeid, normalize(RUNNER, nodeid))
+    key = _KEYS.get(nodeid)
+    # `dict.get(k, normalize(...))` would rebuild the key on *every* call, even
+    # on a hit: ~0.2 s on a 2k-test suite, i.e. more than the ledger I/O itself.
+    return key if key is not None else normalize(RUNNER, nodeid)
 
 
 def _watch():

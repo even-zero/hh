@@ -25,6 +25,7 @@ METRICS = [
     ("exec.hh_warm_exec_wall", "hh warm run wall (collection excluded)", -1, "s"),
     ("exec.exec_overhead_pct", "hh executor overhead, collection excluded", -1, "%"),
     ("exec.hh_warm_overhead_ms", "hh warm self-metered overhead", -1, "ms"),
+    ("exec.record_delta_pct", "cold record pass vs naive (should be ~0)", -1, "%"),
     ("exec.pred_err_warm_pct", "W1 warm prediction error", -1, "%"),
     ("exec.pred_err_w2_pct", "W2 warm prediction error", -1, "%"),
     ("exec.resume_naive_total_s", "resume scenario: naive total", -1, "s"),
@@ -57,6 +58,7 @@ def flatten(results: dict) -> dict:
         plain = next((a for a in logs if a.get("policy") == "naive-default"
                       and a.get("scenario") == "clean" and a["outcome"] == "ok"), None)
         f["exec.plain_s"] = (plain or {}).get("wall_ms", 0) / 1000 or None
+        f["exec.record_delta_pct"] = (rr.get("record") or {}).get("delta_pct")
         rw = rr.get("run_warm") or {}
         f["exec.hh_warm_wall"] = rw.get("wall_s")
         f["exec.hh_warm_exec_wall"] = rw.get("exec_wall_s")
