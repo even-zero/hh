@@ -27,8 +27,8 @@ to name an exact set of tests, while nextest has both.
   left out — nextest does not run them by default, so recording them would only
   create ids that never resolve — and so are suites whose `status` says they
   were not listed for this host.
-- **Execution** runs `cargo nextest run --message-format json` and reads
-  **libtest** JSON, one object per line:
+- **Execution** runs `cargo nextest run --message-format libtest-json` and
+  reads **libtest** JSON, one object per line:
 
   ```json
   {"type":"suite","event":"started","test_count":2}
@@ -78,6 +78,10 @@ which is the nearest useful aggregate for a Rust suite.
 - **Exit code 100 means "tests failed"**, which is data, not an error. Exit 4
   means "no tests ran", which on a filtered resume means the ids no longer match
   the suite, and that is reported as an error instead of a silent empty run.
+- **libtest-json is still marked experimental in nextest**: it refuses to emit
+  it (exit 95) unless `NEXTEST_EXPERIMENTAL_LIBTEST_JSON=1` is set, and hh sets
+  that for the run it starts. Nothing about the format changes with the flag;
+  the flag is only nextest's way of saying the schema may still move.
 - **Compilation is not the test.** `cargo nextest run` builds first; that time
   is part of the wall clock hh reports, but it is measured as startup, not as a
   test, so the budget is not dominated by it.
