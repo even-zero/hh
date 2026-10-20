@@ -188,17 +188,28 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: taiki-e/install-action@nextest
 
+      # A one-line inventory, as annotations: the job log is served from blob
+      # storage, which is not reachable from everywhere these runs are checked.
+      - name: Toolchain inventory
+        run: |
+          for t in ruby gem go cargo cargo-nextest php phpunit cmake ctest dotnet; do
+            printf '::warning::%s: %s\n' "$t" "$(command -v "$t" || echo MISSING)"
+          done
+
       # Every tool here is a real one: the tests drive `go test`, `cargo
       # nextest`, `rspec`, `phpunit` and `ctest`, and one of them would
       # silently pass as a fixture if the parser only ever saw our own output.
       - name: Install RSpec
-        # --install-dir keeps this out of the system gem directory, which the
-        # runner image may not let us write to.
+        # --user-install: the runner image's Ruby is not writable by the job.
         run: |
+          if ! command -v ruby > /dev/null; then
+            sudo apt-get update && sudo apt-get install -y ruby-full
+          fi
           ruby --version
-          gem install --no-document --install-dir /tmp/gems rspec
-          echo "/tmp/gems/bin" >> "$GITHUB_PATH"
-          /tmp/gems/bin/rspec --version
+          gem install --no-document --user-install rspec
+          bindir="$(ruby -e 'print Gem.user_dir')/bin"
+          echo "$bindir" >> "$GITHUB_PATH"
+          "$bindir/rspec" --version
 
       - name: Install PHP and PHPUnit
         run: |
