@@ -105,6 +105,14 @@ jobs:
           fi
           exit "$status"
 
+      - name: The real JUnit test must run in this job
+        run: |
+          if grep -q "skipped 'needs a JDK" /tmp/tests.log; then
+            echo "::error::the JUnit integration test was skipped in the JUnit job"
+            exit 1
+          fi
+          grep -E "test_real_suite_records_and_then_measures .* ok" /tmp/tests.log
+
   package:
     name: wheel
     runs-on: ubuntu-latest
