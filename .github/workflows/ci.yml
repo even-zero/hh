@@ -181,10 +181,13 @@ jobs:
       # nextest`, `rspec`, `phpunit` and `ctest`, and one of them would
       # silently pass as a fixture if the parser only ever saw our own output.
       - name: Install RSpec
+        # --install-dir keeps this out of the system gem directory, which the
+        # runner image may not let us write to.
         run: |
           ruby --version
-          gem install rspec --no-document
-          rspec --version
+          gem install --no-document --install-dir /tmp/gems rspec
+          echo "/tmp/gems/bin" >> "$GITHUB_PATH"
+          /tmp/gems/bin/rspec --version
 
       - name: Install PHP and PHPUnit
         run: |
