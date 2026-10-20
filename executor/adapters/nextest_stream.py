@@ -237,7 +237,10 @@ def _groups(targets: list[tuple[str, str]]) -> list[list[tuple[str, str]]]:
 
 def _stream_run(tool: str, root: str, targets: list[tuple[str, str]],
                 identity: Identity, ledger: str, filtered: bool) -> int:
-    args = _cargo_argv(tool, "run", "--message-format", "json")
+    # `run` names its formats differently from `list`: json is only a listing
+    # format; a run streams libtest-json (libtest-json-plus adds nextest's own
+    # metadata fields, which hh does not need).
+    args = _cargo_argv(tool, "run", "--message-format", "libtest-json")
     if filtered:
         args += ["-E", _filter_expression(targets)]
     wanted = {raw_for(*t) for t in targets}
