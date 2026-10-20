@@ -62,10 +62,10 @@ Two things are needed, because JUnit gives neither for free:
 The classpath is resolved in this order, and the error tells you which step
 failed:
 
-1. `HH_JUNIT_CLASSPATH` — used verbatim (path-separator separated). This is the
-   answer for Gradle projects:
-   `HH_JUNIT_CLASSPATH=$(./gradlew -q printTestClasspath)` or your IDE's test
-   classpath, including the JUnit jars.
+1. `HH_JUNIT_CLASSPATH` — used verbatim (path-separator separated), for Gradle
+   projects or any build tool hh does not know. Point it at the test runtime
+   classpath including the JUnit jars, e.g. from your IDE, or add a one-line
+   task that prints `sourceSets.test.runtimeClasspath.asPath`.
 2. `mvn dependency:build-classpath` when `pom.xml` and `mvn` are present
    (cached next to the compiled driver).
 3. a `junit-platform-console-standalone-*.jar` somewhere in the project.
