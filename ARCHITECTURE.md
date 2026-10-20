@@ -65,7 +65,7 @@ There is no sharding, no worker pool, no hang quarantine, no escalation ladder.
 
 ## 5. Identity
 
-A test's key is `runner::file::class.name` (see `hh/keys.py`), with a
+A test's key is `runner::file::class.name` (see `executor/keys.py`), with a
 collision suffix for inherited/parametrised methods. For `junit` the class
 segment is kept, because in Java the class is the file; for the Python runners
 it is dropped so a class rename cannot break identity. The same normalisation is
@@ -82,20 +82,28 @@ Censored rows (killed at a budget) are kept and counted as lower bounds.
 
 ## 7. Adapters
 
+Which adapter serves which runner is one table:
+`executor/adapters/registry.py`.
+
 | runner | discovery | ledger |
 |---|---|---|
 | pytest | `--collect-only` in a child process | `pytest_plugin` (start/end rows, watchdog start rows) |
 | unittest | import + enumerate (`unittest.defaultTestLoader`) | `unittest_stream.LedgerResult` |
-| Mocha | load files in a child, print `{key, raw_id}` | `mocha_stream.cjs` (run mode) |
+| Mocha (`node`) | load files in a child, print `{key, raw_id}` | `js/mocha_stream.cjs` (run mode), one row per test |
+| Jest, Vitest, `node:test`, tap | the runner's own file list, or its file shapes | `js/common.cjs`: one row per **file**, chunked |
 | JUnit | JUnit Platform launcher over the compiled test classes | `HhJunit.java` (compiled once with `javac`, run per attempt) |
 
-All four skip tests already present in the ledger, so a resumed run — record
-pass or measured — never re-pays finished work.
+`docs/README.md` documents each runner in full, including what is deliberately
+not supported and why; `docs/javascript.md` has the model the JS adapters share.
+
+Every adapter skips units already present in the ledger, so a resumed run —
+record pass or measured — never re-pays finished work. The unit differs: a test
+for pytest/unittest/Mocha/JUnit, a whole file for the other four JS runners.
 
 The JUnit adapter needs the project's test classpath and a JDK, and it uses the
-same three fallbacks documented in README.md (`HH_JUNIT_CLASSPATH`, Maven, a
-console-standalone jar). Its ledger rows and its key derivation are pinned to
-`hh/keys.py` by a check in the adapter: if the Java driver and Python disagree
+same three fallbacks documented in `docs/junit.md` (`HH_JUNIT_CLASSPATH`, Maven,
+a console-standalone jar). Its ledger rows and its key derivation are pinned to
+`executor/keys.py` by a check in the adapter: if the Java driver and Python disagree
 about a single id, discovery fails with that id in the message instead of
 letting the next run silently fail to find its tests.
 

@@ -26,7 +26,7 @@ jobs:
           python - <<'EOF'
           import os, pathlib, re
           version = re.search(r'__version__ = "([^"]+)"',
-                              pathlib.Path("hh/__init__.py").read_text()).group(1)
+                              pathlib.Path("executor/__init__.py").read_text()).group(1)
           tag = os.environ["GITHUB_REF_NAME"]
           if tag != f"v{version}":
               raise SystemExit(f"tag {tag} does not match package version v{version}")
@@ -47,7 +47,7 @@ jobs:
           set -euo pipefail
           python -m venv /tmp/venv
           /tmp/venv/bin/pip install --quiet --disable-pip-version-check dist/*.whl
-          /tmp/venv/bin/python -c "import hh, hh.tool; print(hh.__version__)"
+          /tmp/venv/bin/python -c "import executor, executor.tool; print(executor.__version__)"
           /tmp/venv/bin/hh --store-root /tmp/hh-release-store plan \
             --root "$GITHUB_WORKSPACE/fixtures/synth_tiny_7" --out /tmp/plan.json > /dev/null
           /tmp/venv/bin/hh --store-root /tmp/hh-release-store run \

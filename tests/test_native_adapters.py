@@ -9,7 +9,7 @@ import tempfile
 import time
 import unittest
 
-from hh.tool import build_plan, execute_plan
+from executor.tool import build_plan, execute_plan
 
 
 class NativeAdapters(unittest.TestCase):
@@ -90,7 +90,7 @@ def test_skip(): pass
         env = dict(os.environ, HH_LEDGER=ledger, HH_START_GRACE_MS="5")
         env["PYTHONPATH"] = os.path.dirname(os.path.dirname(__file__)) + os.pathsep + env.get("PYTHONPATH", "")
         p = subprocess.Popen([sys.executable, "-m", "pytest", "-q", "-p",
-                              "hh.adapters.pytest_plugin", "-p", "no:cacheprovider"],
+                              "executor.adapters.pytest_plugin", "-p", "no:cacheprovider"],
                              cwd=self.repo, env=env, stdout=subprocess.DEVNULL,
                              stderr=subprocess.DEVNULL, start_new_session=True)
         try:

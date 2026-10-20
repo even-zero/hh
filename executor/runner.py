@@ -20,6 +20,8 @@ import subprocess
 import sys
 import time
 
+from .adapters import registry
+
 MAX_ATTEMPTS = 3          # a resume ladder, not an infinite retry loop
 
 
@@ -101,12 +103,13 @@ def _selection_file(checkpoint: str, tests: list[dict]) -> str:
     return path
 
 
-def _cmd(adapter: str, root: str, ledger: str, tests_file: str | None) -> list[str]:
-    if adapter == "hh.adapters.mocha_stream":
-        script = os.path.join(os.path.dirname(__file__), "adapters", "mocha_stream.cjs")
-        cmd = ["node", script, "run", root, ledger]
+def _cmd(runner: str, root: str, ledger: str, tests_file: str | None) -> list[str]:
+    """The child command for one attempt: `node <js adapter>` or `python -m ...`."""
+    if registry.is_node(runner):
+        cmd = ["node", registry.node_script(runner), "run", root, ledger]
         return cmd + ([tests_file] if tests_file else [])
-    cmd = [sys.executable, "-m", adapter, "--root", root, "--ledger", ledger]
+    cmd = [sys.executable, "-m", registry.module_name(runner),
+           "--root", root, "--ledger", ledger]
     return cmd + (["--tests-file", tests_file] if tests_file else [])
 
 
@@ -144,8 +147,7 @@ def _mark_victim(ledger: str, remaining: list[dict], kill_ts: float) -> float | 
 
 # -- the executor ---------------------------------------------------------
 
-def execute(plan: dict, root: str,
-            adapter: str = "hh.adapters.unittest_stream",
+def execute(plan: dict, root: str, runner: str = "unittest",
             log=lambda *a: None) -> dict:
     """Run the plan's single shard under its budget; resume on overrun."""
     ledger = os.path.join(plan["checkpoint_dir"], "ledger.jsonl")
@@ -180,7 +182,7 @@ def execute(plan: dict, root: str,
         off = _size(ledger)
         t0 = time.time()
         sel = None if full else _selection_file(plan["checkpoint_dir"], tests)
-        ok, wall, out = _run(_cmd(adapter, root, ledger, sel), budget + startup_s, env)
+        ok, wall, out = _run(_cmd(runner, root, ledger, sel), budget + startup_s, env)
         stats["wall_s"] += wall
         first = _first_row_ts(ledger, off)
         if first is not None:
@@ -211,7 +213,12 @@ def execute(plan: dict, root: str,
                 log(f"  {len(remaining)} ids no longer resolve (recorded as unresolved)")
                 break
         if wall < (budget + startup_s) * 0.999:   # died on its own (import error, crash)
-            stats["error"] = (out or "").strip().splitlines()[-1:] or ["adapter exited early"]
+            # The useful line is the thrown message, not the stack's last line
+            # ("Node.js v22.22.3"); fall back to the tail when nothing says
+            # "Error".
+            lines = [ln.strip() for ln in (out or "").splitlines() if ln.strip()]
+            errs = [ln for ln in lines if "Error" in ln]
+            stats["error"] = (errs[:3] or lines[-3:]) or ["adapter exited early"]
             log("  adapter exited before finishing the suite")
             break
         stats["timed_out"] += 1

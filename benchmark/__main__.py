@@ -175,7 +175,7 @@ def hh_call(repo: dict, store: str, budget_s: float | None = None) -> dict:
     spec = json.dumps({"root": work_dir(repo), "runner": repo["runner"],
                        "store_root": store,
                        **({"budget_s": budget_s} if budget_s else {})})
-    code = ("import json,sys;from hh.tool import handle_tool_call;"
+    code = ("import json,sys;from executor.tool import handle_tool_call;"
             "print(handle_tool_call('run_tests', json.loads(sys.argv[1])))")
     rc, w, out = sh([sys.executable, "-c", code, spec], work_dir(repo),
                     HARD_CAP_S, env_for(repo, store))
@@ -516,7 +516,7 @@ def report(out: dict) -> str:
 
 def _version() -> str:
     sys.path.insert(0, ROOT)
-    from hh import __version__
+    from executor import __version__
     p = subprocess.run(["git", "-C", ROOT, "rev-parse", "--short", "HEAD"],
                        capture_output=True, text=True)
     return f"{__version__} ({p.stdout.strip()})"

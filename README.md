@@ -21,7 +21,7 @@ Stdlib-only core · zero install · no network · SQLite store inside the repo.
 As a tool (the agent-facing surface):
 
 ```python
-from hh.tool import handle_tool_call
+from executor.tool import handle_tool_call
 
 result = handle_tool_call("run_tests", {"root": "/path/to/repo", "runner": "pytest"})
 # -> {"status": "ok",
@@ -39,52 +39,27 @@ hh run  --plan plan.json --root .                  # execute + record
 hh report                                          # what the store has measured
 ```
 
-`--runner` is one of `unittest`, `pytest`, `node` (Mocha) or `junit` (any test
-framework on the JUnit Platform — JUnit 5, JUnit 4 through Vintage, and Kotlin
-suites compiled against either). The store lives in `./.hh/` inside the suite
-root (gitignore it, or point `--store-root` elsewhere).
+The store lives in `./.hh/` inside the suite root (gitignore it, or point
+`--store-root` elsewhere). The command keeps the name `hh`; the importable
+package is `executor`.
 
-## Java and Kotlin (JUnit)
+## Supported runners
 
-hh drives the JUnit Platform directly, so Java and Kotlin suites get the same
-treatment as the Python ones: a record pass, then a measured budget, and a
-resume that never re-pays a finished test.
+| `--runner` | language | frameworks | doc |
+|---|---|---|---|
+| `pytest` | Python | pytest | [docs/pytest.md](docs/pytest.md) |
+| `unittest` | Python | stdlib `unittest` | [docs/unittest.md](docs/unittest.md) |
+| `node` | JavaScript | Mocha | [docs/mocha.md](docs/mocha.md) |
+| `jest` | JavaScript | Jest | [docs/jest.md](docs/jest.md) |
+| `vitest` | JavaScript | Vitest | [docs/vitest.md](docs/vitest.md) |
+| `node-test` | JavaScript | Node's built-in `node:test` | [docs/node-test.md](docs/node-test.md) |
+| `tap` | JavaScript | node-tap | [docs/tap.md](docs/tap.md) |
+| `junit` | Java, Kotlin | JUnit 5, JUnit 4 via Vintage, Kotlin suites | [docs/junit.md](docs/junit.md) |
 
-Two things are needed, because JUnit gives neither for free:
-
-- **a JDK**, not just a JRE — hh compiles a small driver
-  (`hh/adapters/HhJunit.java`) on first use and caches it in `.hh/junit/`;
-- **the project's test classpath** and **compiled test classes**. Build first
-  (`mvn test-compile`, `gradle testClasses`); hh looks in
-  `target/test-classes`, `build/classes/java/test`, `build/classes/kotlin/test`
-  and the usual siblings.
-
-The classpath is resolved in this order, and the error tells you which step
-failed:
-
-1. `HH_JUNIT_CLASSPATH` — used verbatim (path-separator separated), for Gradle
-   projects or any build tool hh does not know. Point it at the test runtime
-   classpath including the JUnit jars, e.g. from your IDE, or add a one-line
-   task that prints `sourceSets.test.runtimeClasspath.asPath`.
-2. `mvn dependency:build-classpath` when `pom.xml` and `mvn` are present
-   (cached next to the compiled driver).
-3. a `junit-platform-console-standalone-*.jar` somewhere in the project.
-
-```bash
-hh --store-root . plan --root . --runner junit --out plan.json
-hh --store-root . run  --plan plan.json --root .          # records the suite
-hh --store-root . plan --root . --runner junit --out plan.json   # now measured
-```
-
-Identity: a Java test is `junit::com/example/FooTest/testAdd`, with invocations
-of a `@ParameterizedTest` tagged by an 8-hex parameter suffix. Unlike the Python
-runners, the class segment is kept — in Java the class *is* the file, so
-dropping it would merge every same-named method in a package.
-
-Limitation, stated rather than hidden: tests generated at runtime
-(`@TestFactory` dynamic tests) are recorded on the run that produces them, but
-a later resumed run cannot address them one by one; hh reports them as
-`unresolved` and keeps their previous measurements.
+`docs/README.md` has the full matrix — what each runner can discover, how
+finely a run can be resumed, the runners that are deliberately not supported
+and why, and the contract a new adapter has to satisfy. The JavaScript adapters
+share one execution model: [docs/javascript.md](docs/javascript.md).
 
 ## What each call returns
 
@@ -102,9 +77,8 @@ a later resumed run cannot address them one by one; hh reports them as
 
 ## How the budget is computed
 
-1. The suite is enumerated (pytest `--collect-only`, unittest import, Mocha load,
-   JUnit Platform discovery), never executed, and the manifest is cached by tree
-   fingerprint.
+1. The suite is enumerated by its runner (see `docs/`), never executed, and the
+   manifest is cached by tree fingerprint.
 2. Every test gets a point estimate: its own measured rows if it has any
    (median/EWMA blend), else its file's mean, else the suite mean.
 3. The suite total is a p50/p90/p99 over those distributions — Monte-Carlo below
@@ -134,15 +108,16 @@ A cold store has no rows, so step 2 has nothing to work with: the tool says so
 ## Repository layout
 
 ```
-hh/
+executor/
+  __main__.py    the `hh` CLI (plan | run | report | tool-spec)
   tool.py        the run_tests tool: plan -> execute -> record -> answer
   policy.py      one shard, one budget (p90 x safety)
   estimator.py   measured durations -> p50/p90/p99
-  executor.py    run under the budget; resume on overrun
+  runner.py      run under the budget; resume on overrun
   store.py       SQLite: runs, observations, aggregates
   keys.py        stable test identities
-  adapters/      unittest, pytest, Mocha, JUnit (ledger + discovery);
-                 HhJunit.java is the JUnit platform driver
+  adapters/      one module per runner (see docs/)
+docs/            one page per runner, plus the support matrix
 benchmark/       ten repos, one metric (see benchmark/README.md)
 tests/           unit + end-to-end tests
 ```
@@ -151,6 +126,7 @@ tests/           unit + end-to-end tests
 
 ```bash
 python3 -m pip install pytest        # the pytest adapter tests need it
+python3 -m executor --version         # the CLI, from a source checkout
 python3 -m unittest discover -s tests -q
 python3 -m benchmark setup && python3 -m benchmark run     # the benchmark
 ```

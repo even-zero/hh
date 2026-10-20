@@ -17,7 +17,8 @@ import unittest
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 
-from hh.tool import TOOL_SPEC, build_plan, handle_tool_call  # noqa: E402
+from executor.adapters import registry  # noqa: E402
+from executor.tool import TOOL_SPEC, build_plan, handle_tool_call  # noqa: E402
 
 FIXTURE = os.path.join(ROOT, "fixtures", "synth_tiny_7")
 
@@ -90,7 +91,7 @@ class TestToolEndToEnd(unittest.TestCase):
         plan = build_plan(suite, store_root=self.store)
         plan["shards"][0]["budget_s"] = 0.1
         plan["total_budget_s"] = 0.1
-        from hh.tool import execute_plan
+        from executor.tool import execute_plan
         res = execute_plan(plan, suite, store_root=self.store)
         self.assertGreaterEqual(res["stats"]["timed_out"], 1)   # it was killed
         self.assertEqual(res["stats"]["attempts"], 2)           # one resume, not a restart
@@ -115,8 +116,12 @@ class TestToolEndToEnd(unittest.TestCase):
         self.assertEqual(TOOL_SPEC["parameters"]["required"], ["root"])
         for p in ("root", "runner", "budget_s", "resume"):
             self.assertIn(p, props)
-        self.assertEqual(props["runner"]["enum"],
-                         ["unittest", "pytest", "node", "junit"])
+        enum = props["runner"]["enum"]
+        self.assertEqual(set(enum),
+                         {"unittest", "pytest", "node", "junit",
+                          "jest", "vitest", "node-test", "tap"})
+        # The spec must be generated from the registry, not a second list.
+        self.assertEqual(enum, list(registry.RUNNERS))
 
 
 @unittest.skipUnless(os.path.isdir(FIXTURE), "fixtures not shipped in this build")
@@ -125,11 +130,11 @@ class TestCli(unittest.TestCase):
         import subprocess
         env = dict(os.environ)
         env["PYTHONPATH"] = ROOT
-        return subprocess.run([sys.executable, "-m", "hh", *args],
+        return subprocess.run([sys.executable, "-m", "executor", *args],
                               capture_output=True, text=True, env=env)
 
     def test_version(self):
-        from hh import __version__
+        from executor import __version__
         p = self.run_cli("--version")
         self.assertEqual(p.stdout.strip(), f"hh {__version__}")
 
@@ -143,7 +148,7 @@ class TestCli(unittest.TestCase):
             env = dict(os.environ)
             env["PYTHONPATH"] = ROOT
             import subprocess
-            p = subprocess.run([sys.executable, "-m", "hh", "--store-root", store,
+            p = subprocess.run([sys.executable, "-m", "executor", "--store-root", store,
                                 "plan", "--root", FIXTURE],
                                capture_output=True, text=True, env=env)
             cold = json.loads(p.stdout)
