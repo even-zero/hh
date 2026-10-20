@@ -17,6 +17,7 @@ import unittest
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 
+from executor.adapters import registry  # noqa: E402
 from executor.tool import TOOL_SPEC, build_plan, handle_tool_call  # noqa: E402
 
 FIXTURE = os.path.join(ROOT, "fixtures", "synth_tiny_7")
@@ -115,8 +116,12 @@ class TestToolEndToEnd(unittest.TestCase):
         self.assertEqual(TOOL_SPEC["parameters"]["required"], ["root"])
         for p in ("root", "runner", "budget_s", "resume"):
             self.assertIn(p, props)
-        self.assertEqual(props["runner"]["enum"],
-                         ["unittest", "pytest", "node", "junit"])
+        enum = props["runner"]["enum"]
+        self.assertEqual(set(enum),
+                         {"unittest", "pytest", "node", "junit",
+                          "jest", "vitest", "node-test", "tap"})
+        # The spec must be generated from the registry, not a second list.
+        self.assertEqual(enum, list(registry.RUNNERS))
 
 
 @unittest.skipUnless(os.path.isdir(FIXTURE), "fixtures not shipped in this build")

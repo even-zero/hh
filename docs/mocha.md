@@ -6,8 +6,9 @@ hh run  --plan plan.json --root .
 ```
 
 The runner value is `node` because Node is the runtime; the framework it drives
-is Mocha. Other JavaScript runners get their own values (`jest`, `vitest`,
-`node-test`, `tap`) in the next batch.
+is Mocha. The other JavaScript runners have their own values — `jest`,
+`vitest`, `node-test`, `tap` — and share the model described in
+[javascript.md](javascript.md).
 
 ## What hh needs
 

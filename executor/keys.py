@@ -67,9 +67,21 @@ def unique_key_map(raw_ids: list[str], runner: str) -> dict[str, str]:
     return out
 
 
+FILE_LEVEL_RUNNERS = frozenset({"jest", "vitest", "node-test", "tap"})
+"""Runners whose unit of work *is* the file.
+
+None of them can enumerate or select an individual test without running it, so
+their key names one file and nothing else (`jest::src/a.test.js`). For those the
+key is already its own file aggregate; stripping the last segment would fold a
+whole directory into one "file" and feed the estimator a meaningless T1.
+"""
+
+
 def file_of(key: str) -> str:
     """File-level aggregate key for a test key (all but the last name segment)."""
     body = key.split("::", 1)[1].split(" :: ")[0]
+    if key.split("::", 1)[0] in FILE_LEVEL_RUNNERS:
+        return key.split(" :: ")[0]
     return body.rsplit("/", 1)[0] if "/" in body else body
 
 

@@ -1,5 +1,46 @@
 # Changelog
 
+## 2.3.0 — 2026-10-20
+
+**Added**
+- `jest`, `vitest`, `node-test` and `tap` runners, so the five common JavaScript
+  suites are all supported: `node` (Mocha), `jest`, `vitest`, `node-test`, `tap`.
+  Each has a page under `docs/`, and the model they share — file granularity for
+  four of them, chunked runs, one ledger row per file — is in
+  `docs/javascript.md`.
+- `executor/adapters/registry.py`: one table that says which adapter serves
+  which runner. The CLI, the tool spec and the executor all read it, so adding a
+  runner is one line plus its docs page.
+- `tests/test_js_adapters.py`: the shared adapter CLI driven by a fake runner
+  (chunking, selection, "no verdict means failed"), plus real end-to-end runs of
+  `node-test` where Node is installed and of jest/vitest/tap/mocha when a probe
+  project is available. A `js (node 22)` CI job installs those runners so they
+  are proved against real output, not a fixture written to match the parser.
+- `HH_JS_CHUNK` (default 25): files per runner process. The ledger is flushed
+  after every chunk, so a SIGKILL loses at most the chunk in flight.
+
+**Fixed**
+- Almost-finished work is now resumed per runner: a repository already measured
+  with one runner no longer makes another runner's first run a predicted one.
+  Each runner's first run is still a record pass.
+- File-level JS keys (`jest::src/a.test.js`) are their own file aggregate.
+  Before, the last path segment was stripped, folding a whole directory into one
+  "file" and feeding the estimator a meaningless fallback tier.
+- A killed **record pass** now resumes: the JS adapters skip units that already
+  have a verdict in the ledger, so the retry neither re-runs nor re-records
+  finished files. Before, the whole suite ran again and every finished file got
+  a second row, which the store counted twice.
+- A crashing adapter no longer seals its ledger. `suite_end` is written only
+  when a run really reaches the end of the suite, so a runner that dies (missing
+  package, config error) is reported as "adapter exited before finishing the
+  suite" instead of passing as a complete run of zero tests, and the reported
+  error is the thrown message rather than the last line of the stack.
+- Mocha adapter: accepts a relative `--root`, and its `collect` mode can write
+  ids to a file like every other adapter.
+- JS adapters ignore files outside the suite root. Jest and tap resolve their
+  own project root, which can be above the root hh was given; a `../` key would
+  have corrupted the store.
+
 ## 2.2.0 — 2026-10-20
 
 **Changed**

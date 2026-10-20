@@ -6,6 +6,7 @@ import json
 import sys
 
 from . import store as store_mod
+from .adapters import registry
 
 
 def cmd_plan(args):
@@ -61,7 +62,7 @@ def main(argv=None) -> int:
 
     p = sub.add_parser("plan", help="measure the suite and emit its budget")
     p.add_argument("--root", required=True)
-    p.add_argument("--runner", default="unittest", choices=("unittest", "pytest", "node", "junit"))
+    p.add_argument("--runner", default="unittest", choices=registry.RUNNERS)
     p.add_argument("--budget", type=float, default=None,
                    help="record pass only: first budget to try (default 30 s)")
     p.add_argument("--resume", action="store_true")
@@ -71,7 +72,7 @@ def main(argv=None) -> int:
     p = sub.add_parser("run", help="execute a plan and record it")
     p.add_argument("--plan", required=True)
     p.add_argument("--root", required=True)
-    p.add_argument("--runner", default="unittest", choices=("unittest", "pytest", "node", "junit"))
+    p.add_argument("--runner", default="unittest", choices=registry.RUNNERS)
     p.set_defaults(fn=cmd_run)
 
     p = sub.add_parser("report", help="what this store has measured")

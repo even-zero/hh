@@ -20,10 +20,11 @@ import sys
 import time
 
 from . import estimator, policy, store as store_mod
+from .adapters import registry
 from .keys import unique_key_map
 from .meter import Meter
 
-RUNNERS = ("unittest", "pytest", "node", "junit")
+RUNNERS = registry.RUNNERS
 
 TOOL_SPEC = {
     "name": "run_tests",
@@ -59,10 +60,11 @@ def _tree_fingerprint(root: str, runner: str) -> str:
     import hashlib
     h = hashlib.sha1()
     h.update(runner.encode())
-    exts = {
-        "node": (".js", ".cjs", ".mjs", ".json"),
-        "junit": (".java", ".kt", ".kts", ".class", ".xml"),
-    }.get(runner, (".py",))
+    exts = ((".js", ".cjs", ".mjs", ".json", ".ts", ".tsx", ".jsx",
+             ".mts", ".cts")
+            if registry.is_node(runner) else (".py",))
+    if runner == "junit":
+        exts = (".java", ".kt", ".kts", ".class", ".xml")
     for dirpath, dirnames, filenames in os.walk(root):
         dirnames[:] = sorted(d for d in dirnames
                              if d not in SKIP_DIRS and not d.startswith("."))
@@ -83,8 +85,8 @@ def collect_manifest(root: str, runner: str, meter: Meter,
     """Enumerate the suite's test ids (ms-level; cached by tree fingerprint).
 
     This is discovery, never execution: pytest runs `--collect-only`, unittest
-    imports the tests, Mocha loads the files. A warm plan reuses the cached
-    manifest instead of paying it again.
+    imports the tests, every JS adapter enumerates its files. A warm plan reuses
+    the cached manifest instead of paying it again.
     """
     import subprocess
     import tempfile
@@ -137,31 +139,28 @@ def collect_manifest(root: str, runner: str, meter: Meter,
                 with open(out, encoding="utf-8") as f:
                     raw_ids = [json.loads(line)["raw_id"]
                                for line in f if line.strip()]
-        elif runner == "node":
-            script = os.path.join(os.path.dirname(__file__), "adapters", "mocha_stream.cjs")
-            proc = subprocess.run(["node", script, "collect", root_abs],
-                                  capture_output=True, text=True)
-            if proc.returncode:
-                raise RuntimeError("Mocha collection failed: "
-                                   + (proc.stdout + proc.stderr)[-2000:])
-            entries, noise = [], 0
-            for line in proc.stdout.splitlines():
-                if not line.strip():
-                    continue
-                try:
-                    row = json.loads(line)
-                except ValueError:
-                    noise += 1
-                    continue
-                if not isinstance(row, dict) or "key" not in row:
-                    noise += 1
-                    continue
-                entries.append(row)
-            if not entries and noise:
-                raise RuntimeError("Mocha collection produced no test ids")
-            # The Mocha adapter owns its identity scheme (path-relative file +
-            # full title, collision-suffixed). Re-normalising it here would
-            # produce keys the ledger never writes.
+        elif registry.is_node(runner):
+            script = registry.node_script(runner)
+            with tempfile.TemporaryDirectory(prefix="hh-collect-") as tmp:
+                out = os.path.join(tmp, "ids.jsonl")
+                proc = subprocess.run(["node", script, "collect", root_abs, out],
+                                      capture_output=True, text=True)
+                if proc.returncode != 0 or not os.path.exists(out):
+                    raise RuntimeError(f"{runner} collection failed: "
+                                       + (proc.stdout + proc.stderr)[-2000:])
+                entries = []
+                with open(out, encoding="utf-8") as f:
+                    for line in f:
+                        if not line.strip():
+                            continue
+                        row = json.loads(line)
+                        if not isinstance(row, dict) or "key" not in row:
+                            raise RuntimeError(f"{runner} collection produced "
+                                               "a malformed id: " + line[:200])
+                        entries.append(row)
+            # The JS adapters own their identity scheme (path-relative file, or
+            # Mocha's full title with collision suffixes). Re-normalising it
+            # here would produce keys the ledger never writes.
             raw_of = {e["key"]: e["raw_id"] for e in entries}
             raw_ids = list(raw_of)
         else:
@@ -178,7 +177,7 @@ def collect_manifest(root: str, runner: str, meter: Meter,
             if not raw_ids and errors:
                 raise RuntimeError("unittest collection failed: " + "; ".join(errors[:5]))
     raw_ids = list(dict.fromkeys(raw_ids))
-    if runner != "node":
+    if not registry.is_node(runner):
         raw_of = {key: raw for raw, key in unique_key_map(raw_ids, runner).items()}
     collection_s = round(meter.spans_ms.get("collect", 0.0) / 1000.0, 3)
     if cache_path:
@@ -221,7 +220,11 @@ def build_plan(root: str, runner: str = "unittest", store_root: str = ".",
     if resume:
         with meter.span("resume_ingest"):
             _ingest_pending(store_root, runner)
-    measured = set(st.agg_map("test"))
+    # Measurements belong to a runner. A jest row says nothing about a pytest
+    # suite, so a runner's first run must still be a record pass even when the
+    # same repository has already been measured by another runner.
+    prefix = f"{runner}::"
+    measured = {k for k in st.agg_map("test") if k.startswith(prefix)}
     if not measured:
         plan = policy.record_plan(checkpoint_dir=policy.new_checkpoint_dir(store_root),
                                   budget_s=budget_s or policy.RECORD_BUDGET_S)
@@ -249,13 +252,9 @@ def execute_plan(plan: dict, root: str, runner: str = "unittest",
     """execute + record step."""
     from .runner import execute, done_map
     st = store_mod.Store(store_root)
-    adapter = {"unittest": "executor.adapters.unittest_stream",
-               "pytest": "executor.adapters.pytest_stream",
-               "node": "executor.adapters.mocha_stream",
-               "junit": "executor.adapters.junit_stream"}[runner]
     ledger = os.path.join(plan["checkpoint_dir"], "ledger.jsonl")
     before = done_map(ledger)
-    stats = execute(plan, os.path.abspath(root), adapter=adapter, log=log)
+    stats = execute(plan, os.path.abspath(root), runner=runner, log=log)
     after = done_map(ledger)
     new = set(after) - set(before)
 

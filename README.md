@@ -50,11 +50,16 @@ package is `executor`.
 | `pytest` | Python | pytest | [docs/pytest.md](docs/pytest.md) |
 | `unittest` | Python | stdlib `unittest` | [docs/unittest.md](docs/unittest.md) |
 | `node` | JavaScript | Mocha | [docs/mocha.md](docs/mocha.md) |
+| `jest` | JavaScript | Jest | [docs/jest.md](docs/jest.md) |
+| `vitest` | JavaScript | Vitest | [docs/vitest.md](docs/vitest.md) |
+| `node-test` | JavaScript | Node's built-in `node:test` | [docs/node-test.md](docs/node-test.md) |
+| `tap` | JavaScript | node-tap | [docs/tap.md](docs/tap.md) |
 | `junit` | Java, Kotlin | JUnit 5, JUnit 4 via Vintage, Kotlin suites | [docs/junit.md](docs/junit.md) |
 
 `docs/README.md` has the full matrix — what each runner can discover, how
 finely a run can be resumed, the runners that are deliberately not supported
-and why, and the contract a new adapter has to satisfy.
+and why, and the contract a new adapter has to satisfy. The JavaScript adapters
+share one execution model: [docs/javascript.md](docs/javascript.md).
 
 ## What each call returns
 

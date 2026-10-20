@@ -14,4 +14,4 @@ Stdlib-only core: zero install, zero sockets, no data leaves the repo.
 Public contract: the ``run_tests`` tool (executor/tool.py) and the CLI
 (``hh plan|run|report|tool-spec``).
 """
-__version__ = "2.2.0"
+__version__ = "2.3.0"

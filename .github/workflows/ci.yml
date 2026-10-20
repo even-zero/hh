@@ -113,6 +113,56 @@ jobs:
           fi
           grep -E "test_real_suite_records_and_then_measures .* ok" /tmp/tests.log
 
+  js:
+    name: js adapters (node 22)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      # The adapters drive the real runners. Installing them is what proves the
+      # parsers against real output (Jest's JSON report, Vitest's, tap's TAP
+      # stream, node:test's reporter protocol) rather than a fixture written to
+      # match the parser.
+      - name: Install the JavaScript runners
+        run: |
+          mkdir -p "$RUNNER_TEMP/jsprobe"
+          cd "$RUNNER_TEMP/jsprobe"
+          npm init -y > /dev/null
+          npm install --no-audit --no-fund --loglevel=error jest vitest tap mocha
+
+      - name: Tests, with real jest / vitest / tap / mocha / node:test
+        env:
+          HH_JS_PROBE: ${{ runner.temp }}/jsprobe
+        run: |
+          set +e
+          python -m unittest discover -s tests -v > /tmp/tests.log 2>&1
+          status=$?
+          if [ "$status" -ne 0 ]; then
+            tail -n 12 /tmp/tests.log | while IFS= read -r line; do
+              line="${line//$'\r'/}"
+              line="${line//'%'/'%25'}"
+              echo "::error::$line"
+            done
+          fi
+          exit "$status"
+
+      - name: The JavaScript adapter tests must run in this job
+        run: |
+          if grep -q "skipped 'needs HH_JS_PROBE" /tmp/tests.log; then
+            echo "::error::a jest/vitest/tap test was skipped in the js job"
+            exit 1
+          fi
+          if grep -q "skipped 'needs node >= 20" /tmp/tests.log; then
+            echo "::error::the node:test test was skipped in the js job"
+            exit 1
+          fi
+
   package:
     name: wheel
     runs-on: ubuntu-latest
@@ -130,6 +180,16 @@ jobs:
           python -m venv /tmp/venv
           /tmp/venv/bin/pip install --quiet --disable-pip-version-check dist/*.whl
           /tmp/venv/bin/python -c "import executor, executor.tool, executor.adapters.unittest_stream; print(executor.__version__)"
+          # The JS adapters are package data, not Python modules: a wheel that
+          # forgot them would import fine and fail only at run time.
+          /tmp/venv/bin/python - <<'PY'
+          import os
+          from executor.adapters import registry
+          for runner in registry.NODE_ADAPTERS:
+              path = registry.node_script(runner)
+              assert os.path.exists(path), f"missing from the wheel: {path}"
+          print("js adapters present:", ", ".join(sorted(registry.NODE_ADAPTERS)))
+          PY
           /tmp/venv/bin/hh tool-spec | python -c "import json,sys; assert json.load(sys.stdin)['name'] == 'run_tests'"
           /tmp/venv/bin/hh --store-root /tmp/hh-wheel-store plan \
             --root "$GITHUB_WORKSPACE/fixtures/synth_tiny_7" --out /tmp/wheel-plan.json > /dev/null

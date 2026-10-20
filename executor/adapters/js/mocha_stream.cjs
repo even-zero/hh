@@ -29,8 +29,9 @@ function tests(suite) {
   return [...suite.tests, ...suite.suites.flatMap(tests)];
 }
 async function main() {
-  const [mode, root, ledger, selection] = process.argv.slice(2);
+  const [mode, rootArg, ledger, selection] = process.argv.slice(2);
   if (!['collect', 'run'].includes(mode)) throw Error('expected collect or run');
+  const root = path.resolve(rootArg || '.');
   process.chdir(root);
   const req = createRequire(path.join(root, 'package.json'));
   for (const mod of (process.env.HH_MOCHA_REQUIRE || '').split(',').map(s => s.trim()).filter(Boolean)) {
@@ -66,8 +67,16 @@ async function main() {
   }
   const key = test => keys.get(test);
   if (mode === 'collect') {
+    // The optional third argument is an output file, so every JS adapter has
+    // the same CLI (`collect <root> [out]`).
+    const out = ledger ? fs.createWriteStream(ledger) : null;
+    const write = entry => (out ? out.write(entry + '\n') : console.log(entry));
     for (const test of all)
-      console.log(JSON.stringify({ key: key(test), raw_id: key(test) }));
+      write(JSON.stringify({ key: key(test), raw_id: key(test) }));
+    if (out) {
+      out.end();
+      console.error(`hh: ${all.length} tests`);
+    }
     return;
   }
   // No selection file => record the whole suite in this one process, exactly
