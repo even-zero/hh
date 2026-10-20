@@ -188,14 +188,6 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: taiki-e/install-action@nextest
 
-      # A one-line inventory, as annotations: the job log is served from blob
-      # storage, which is not reachable from everywhere these runs are checked.
-      - name: Toolchain inventory
-        run: |
-          for t in ruby gem go cargo cargo-nextest php phpunit cmake ctest dotnet; do
-            printf '::warning::%s: %s\n' "$t" "$(command -v "$t" || echo MISSING)"
-          done
-
       # Every tool here is a real one: the tests drive `go test`, `cargo
       # nextest`, `rspec`, `phpunit` and `ctest`, and one of them would
       # silently pass as a fixture if the parser only ever saw our own output.
