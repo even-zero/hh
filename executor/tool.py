@@ -253,7 +253,11 @@ def build_plan(root: str, runner: str = "unittest", store_root: str = ".",
         plan = policy.record_plan(checkpoint_dir=policy.new_checkpoint_dir(store_root),
                                   budget_s=budget_s or policy.RECORD_BUDGET_S)
         plan.overhead_ms = meter.total_ms
-        return json.loads(plan.to_json())
+        out = json.loads(plan.to_json())
+        # The plan says which runner produced it: `hh run` must not have to be
+        # told again, and cannot silently run a different adapter.
+        out["runner"] = runner
+        return out
 
     keys, raw_of, collected_s = collect_manifest(root, runner, meter, store_root)
     est = estimator.estimate(keys, st)
@@ -268,12 +272,20 @@ def build_plan(root: str, runner: str = "unittest", store_root: str = ".",
     plan.manifest_size = len(keys)
     plan.measured_tests = sum(1 for k in keys if k in measured)
     plan.overhead_ms = meter.total_ms
-    return json.loads(plan.to_json())
+    out = json.loads(plan.to_json())
+    out["runner"] = runner
+    return out
 
 
-def execute_plan(plan: dict, root: str, runner: str = "unittest",
+def execute_plan(plan: dict, root: str, runner: str | None = None,
                  store_root: str = ".", log=lambda *a: None) -> dict:
-    """execute + record step."""
+    """execute + record step.
+
+    The runner comes from the plan unless the caller names one; a plan written
+    for `node-test` must not be executed by the unittest adapter because a
+    default was left in place.
+    """
+    runner = runner or plan.get("runner") or "unittest"
     from .runner import execute, done_map
     st = store_mod.Store(store_root)
     ledger = os.path.join(plan["checkpoint_dir"], "ledger.jsonl")

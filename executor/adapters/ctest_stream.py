@@ -31,7 +31,6 @@ from . import base, driver
 SUMMARY = re.compile(
     r"^\s*\d+/\d+\s+Test\s+#\d+:\s+(?P<name>.+?)\s+\.{3,}\s*"
     r"(?P<status>\S.*?)\s+(?P<sec>\d+(?:\.\d+)?)\s+sec\s*$")
-START = re.compile(r"^\s*Start\s+\d+:\s+(?P<name>.+?)\s*$")
 
 SKIP_DIRS = {".git", "node_modules", ".hh", "__pycache__", ".venv", "venv",
              ".cache", "vcpkg_installed", "dist", "out"}

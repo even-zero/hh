@@ -185,6 +185,18 @@ common.main('boom', {{ collect, runChunk }});
         rows = read_jsonl(ledger) if os.path.exists(ledger) else []
         self.assertEqual([r for r in rows if r["type"] == "suite_end"], [])
 
+    def test_a_second_run_does_not_repeat_finished_files(self):
+        """A retried record pass must not run (or record) a file twice."""
+        ledger = os.path.join(self.tmp, "ledger.jsonl")
+        self.assertEqual(self.run_fake("run", ".", ledger).returncode, 0)
+        first = [r for r in read_jsonl(ledger) if r["type"] == "end"]
+        self.assertEqual(len(first), 3)
+        self.assertEqual(self.run_fake("run", ".", ledger).returncode, 0)
+        rows = read_jsonl(ledger)
+        self.assertEqual(len([r for r in rows if r["type"] == "end"]), 3)
+        self.assertEqual(rows[-1]["type"], "suite_end")
+        self.assertEqual(rows[-1]["tests"], 0)
+
     def test_selection_runs_only_the_listed_files(self):
         sel = os.path.join(self.tmp, "selection.jsonl")
         write(sel, json.dumps({"raw_id": "b.test.js", "key": "fake::b.test.js"}) + "\n")
@@ -283,7 +295,12 @@ class TestNodeTestAdapter(_ProbeSuite, unittest.TestCase):
         ends2 = [r for r in read_jsonl(ledger2) if r["type"] == "end"]
         self.assertEqual([r["raw_id"] for r in ends2], ["a.test.mjs"])
 
-    def test_a_record_pass_retry_does_not_write_duplicate_rows(self):
+    def test_a_record_pass_retry_does_not_run_finished_files_again(self):
+        """The record pass can be killed too; its retry must not re-run files.
+
+        The adapter is handed the same ledger and no selection, exactly what a
+        retry inside the record pass does.
+        """
         root = self.make_project(False, self.FILES)
         _collected, _ends, _root, ledger = self.collect_and_run("node-test", root)
         res = adapter("node-test", "run", root, ledger)   # what a resume does
@@ -370,7 +387,10 @@ class TestJsRunnerThroughTheTool(unittest.TestCase):
         cold = build_plan(self.root, runner="node-test", store_root=self.store)
         self.assertEqual(cold["operating_level"], "record")
         self.assertTrue(cold["shards"][0]["full_suite"])
-        res = execute_plan(cold, self.root, runner="node-test", store_root=self.store)
+        self.assertEqual(cold["runner"], "node-test")
+        # no runner argument: the plan carries it, so the unittest adapter
+        # cannot quietly run instead
+        res = execute_plan(cold, self.root, store_root=self.store)
         self.assertTrue(res["stats"]["suite_complete"], res)
         self.assertEqual(res["ingested"], 2)
 

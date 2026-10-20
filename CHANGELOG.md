@@ -29,6 +29,10 @@
   resume needs. See the "not supported, and why" table in `docs/README.md`.
 
 **Fixed**
+- A killed record pass resumes instead of restarting: the adapters read the
+  ledger they are given and skip units that already have a verdict. Before, a
+  retry of the record pass re-ran and re-recorded finished files, so the store
+  counted them twice.
 - The manifest cache fingerprint covers each ecosystem's own files (`.go`,
   `.rs`, `.rb`, `.php`, CMake lists), so editing one rebuilds the test list.
 
