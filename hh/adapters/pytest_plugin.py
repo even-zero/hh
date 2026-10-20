@@ -21,6 +21,7 @@ _ACTIVE = None  # (nodeid, perf_start, key, ledger) for the current test
 _LOCK = threading.Lock()
 _WATCHER = None
 _KEYS: dict[str, str] | None = None
+_DONE: set[str] | None = None
 
 
 def _key(nodeid):
@@ -33,7 +34,41 @@ def _key(nodeid):
                          for entry in [json.loads(line)]}
         else:
             _KEYS = {}
-    return _KEYS.get(nodeid, normalize(RUNNER, nodeid))
+    key = _KEYS.get(nodeid)
+    # `dict.get(k, normalize(...))` would rebuild the key on *every* call, even
+    # on a hit: ~0.2 s on a 2k-test suite, i.e. more than the ledger I/O itself.
+    return key if key is not None else normalize(RUNNER, nodeid)
+
+
+def _done() -> set[str]:
+    """Keys already recorded in this ledger (a resumed run must not re-pay)."""
+    global _DONE
+    if _DONE is None:
+        _DONE = set()
+        led = os.environ.get("HH_LEDGER")
+        if led and os.path.exists(led):
+            with open(led, encoding="utf-8", errors="replace") as f:
+                for line in f:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        row = json.loads(line)
+                    except ValueError:
+                        continue
+                    if row.get("type") == "end" and row.get("key"):
+                        _DONE.add(row["key"])
+    return _DONE
+
+
+def pytest_collection_modifyitems(items):
+    """Resume support: drop tests this ledger already finished."""
+    led = os.environ.get("HH_LEDGER")
+    if not led:
+        return
+    done = _done()
+    if done:
+        items[:] = [i for i in items if _key(i.nodeid) not in done]
 
 
 def _watch():

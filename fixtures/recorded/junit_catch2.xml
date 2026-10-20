@@ -1,7 +1,0 @@
-<?xml version="1.0"?>
-<testsuites>
-  <testsuite name="VectorTests" hostname="localhost" time="0.002" tests="2" failures="0">
-    <testcase name="push_back" classname="VectorTests" time="0.00123"/>
-    <testcase name="resize" classname="VectorTests" time="0.00077"/>
-  </testsuite>
-</testsuites>

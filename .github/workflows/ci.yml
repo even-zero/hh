@@ -1,8 +1,11 @@
 name: ci
 
+# The product is one tool and one benchmark. CI runs the tests, smokes the CLI,
+# and proves the wheel installs and works from a clean venv. Nothing else.
+
 on:
   push:
-    branches: [main]
+    branches: [master]
   pull_request:
   workflow_dispatch:
 
@@ -20,68 +23,54 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python: ["3.10", "3.11", "3.12", "3.13"]
+        # oldest supported and newest stable; the suite is quick, the range is
+        # what matters.
+        python: ["3.10", "3.13"]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "${{ matrix.python }}"
 
-      # The core is stdlib-only by design: installing nothing here means an
-      # accidental third-party import fails the build immediately.
-      - name: Test suite (stdlib only, no install)
+      # hh itself is stdlib-only; pytest is installed because the pytest
+      # adapter is part of what these tests exercise.
+      - name: Install test dependency
+        run: python -m pip install --quiet --disable-pip-version-check pytest
+
+      - name: Unit and end-to-end tests
         run: python -m unittest discover -s tests -v
 
-      - name: Recorded-parser conformance (13 runner fixtures)
-        run: python experiments/conformance.py
-
-      - name: CLI smoke — plan, run, receipt
+      - name: CLI smoke (plan -> run -> report on the fixture)
         run: |
           python -m hh --version
           python -m hh tool-spec > /tmp/tool.json
-          python -c "import json;assert json.load(open('/tmp/tool.json'))['name']=='run_tests'"
-          python -m hh --store-root /tmp/h8 plan --root fixtures/synth_tiny_7 --out /tmp/plan.json
-          python -m hh --store-root /tmp/h8 run --plan /tmp/plan.json --root fixtures/synth_tiny_7 --suite-id ci
-          python -m hh --store-root /tmp/h8 savings --json
+          python -c "import json; assert json.load(open('/tmp/tool.json'))['name'] == 'run_tests'"
+          python -m hh --store-root /tmp/hh-store plan \
+            --root fixtures/synth_tiny_7 --out /tmp/plan.json > /dev/null
+          python -m hh --store-root /tmp/hh-store run \
+            --plan /tmp/plan.json --root fixtures/synth_tiny_7 > /dev/null
+          python -m hh --store-root /tmp/hh-store report > /tmp/report.json
+          python -c "import json; d = json.load(open('/tmp/report.json')); assert d['tests_tracked'] > 0, d"
 
   package:
-    name: build + install from wheel
+    name: wheel
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: python -m pip install --upgrade build
+      - run: python -m pip install --quiet --disable-pip-version-check build
       - name: Build sdist + wheel
         run: python -m build
-      - name: Install the wheel into a clean venv and smoke it
+      - name: Install the wheel into a clean venv and run it
         run: |
+          set -euo pipefail
           python -m venv /tmp/venv
-          /tmp/venv/bin/pip install --quiet dist/*.whl
-          /tmp/venv/bin/hh --version
-          /tmp/venv/bin/hh tool-spec > /tmp/tool.json
-          /tmp/venv/bin/hh --store-root /tmp/h8w plan \
-            --root "$GITHUB_WORKSPACE/fixtures/synth_tiny_7" --out /tmp/plan.json
-          cd /tmp && /tmp/venv/bin/hh --store-root /tmp/h8w run \
-            --plan /tmp/plan.json --root "$GITHUB_WORKSPACE/fixtures/synth_tiny_7" --suite-id wheel
-      - name: Verify installed package is importable from a different cwd
-        run: cd /tmp && /tmp/venv/bin/python -c "import hh, hh.tool, hh.savings; print(hh.__version__)"
-      - uses: actions/upload-artifact@v4
-        with:
-          name: dist
-          path: dist/*
-
-  live-adapters:
-    name: live adapters (jest, mocha, node:test)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "20"
-      - name: Live JS conformance (installs jest+mocha into a scratch dir)
-        run: python experiments/conformance.py --live-js
+          /tmp/venv/bin/pip install --quiet --disable-pip-version-check dist/*.whl
+          /tmp/venv/bin/python -c "import hh, hh.tool, hh.adapters.unittest_stream; print(hh.__version__)"
+          /tmp/venv/bin/hh tool-spec | python -c "import json,sys; assert json.load(sys.stdin)['name'] == 'run_tests'"
+          /tmp/venv/bin/hh --store-root /tmp/hh-wheel-store plan \
+            --root "$GITHUB_WORKSPACE/fixtures/synth_tiny_7" --out /tmp/wheel-plan.json > /dev/null
+          /tmp/venv/bin/hh --store-root /tmp/hh-wheel-store run \
+            --plan /tmp/wheel-plan.json --root "$GITHUB_WORKSPACE/fixtures/synth_tiny_7" > /dev/null

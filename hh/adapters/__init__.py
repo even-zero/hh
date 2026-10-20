@@ -1,1 +1,1 @@
-# adapters package (Tier A/B/C capture layer)
+"""The three test adapters: unittest, pytest, Mocha."""

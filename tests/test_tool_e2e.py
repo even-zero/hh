@@ -1,13 +1,15 @@
 """End-to-end: the agent-facing tool against the tiny fixture.
 
-Pins the contract an agent depends on: run → ok + learned coverage; resume →
-already-paid work recognised; impossible deadline → refusal with a receipt, not
-a burnt budget.
+Pins the contract the timeout metric depends on:
+
+  * the first call records and predicts nothing;
+  * the second call's budget is measured (p90 x safety) and it finishes inside it;
+  * a budget that is too low costs one budget and a resume, not the whole suite;
+  * a stale/absent suffix cannot masquerade as a complete suite.
 """
 import json
 import os
 import shutil
-import subprocess
 import sys
 import tempfile
 import unittest
@@ -15,7 +17,7 @@ import unittest
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 
-from hh.tool import TOOL_SPEC, handle_tool_call  # noqa: E402
+from hh.tool import TOOL_SPEC, build_plan, handle_tool_call  # noqa: E402
 
 FIXTURE = os.path.join(ROOT, "fixtures", "synth_tiny_7")
 
@@ -23,85 +25,111 @@ FIXTURE = os.path.join(ROOT, "fixtures", "synth_tiny_7")
 @unittest.skipUnless(os.path.isdir(FIXTURE), "fixtures not shipped in this build")
 class TestToolEndToEnd(unittest.TestCase):
     def setUp(self):
-        self.store = tempfile.mkdtemp(prefix="h8-e2e-")
+        self.store = tempfile.mkdtemp(prefix="hh-e2e-")
 
     def tearDown(self):
         shutil.rmtree(self.store, ignore_errors=True)
 
     def call(self, **kw):
-        args = {"root": FIXTURE, "workers": 2, "store_root": self.store}
+        args = {"root": FIXTURE, "store_root": self.store}
         args.update(kw)
         d = json.loads(handle_tool_call("run_tests", args))
         self.assertNotIn("error", d, d)
         return d
 
-    def test_cold_run_is_ok_and_learns_everything(self):
+    def test_first_call_records_and_predicts_nothing(self):
         d = self.call()
         self.assertEqual(d["status"], "ok")
-        self.assertEqual(d["results"]["n_failed"], 0)
-        self.assertGreaterEqual(d["results"]["ingested"], 12)
-        self.assertEqual(d["estimate"]["coverage"], 0.0)          # cold
-        self.assertGreater(d["learning"]["coverage_after"], 0.99)  # measured now
-        self.assertIn("time_saved", d)
+        self.assertEqual(d["operating_level"], "record")
+        self.assertEqual(d["budget"]["basis"], "record")
+        self.assertIsNone(d["predicted_wall_s"])        # no guess is offered
+        self.assertEqual(d["budget"]["measured_tests"], 0)
+        self.assertGreaterEqual(d["recorded"], 12)
+        self.assertEqual(d["attempts"], 1)
+        self.assertEqual(d["timed_out"], 0)
 
-    def test_second_call_is_warm(self):
+    def test_second_call_uses_a_measured_budget(self):
+        self.call()                                     # the record pass
+        warm = self.call()
+        self.assertEqual(warm["operating_level"], "measured")
+        self.assertEqual(warm["budget"]["basis"], "measured")
+        self.assertEqual(warm["status"], "ok")
+        self.assertEqual(warm["timed_out"], 0)          # no SIGKILL on a measured budget
+        self.assertGreater(warm["budget"]["budget_s"], 0)
+        self.assertGreater(warm["budget"]["coverage"], 0.99)
+        # the budget is the p90 plus headroom, not the mean
+        self.assertGreaterEqual(warm["budget"]["budget_s"],
+                                warm["budget"]["p90_s"])
+        self.assertLessEqual(warm["wall_s"] + 0.2, warm["budget"]["budget_s"])
+
+    def test_budget_covers_the_suite_over_repeats(self):
+        """The point of the metric: the measured budget keeps not killing it."""
         self.call()
-        d = self.call()
-        self.assertEqual(d["estimate"]["coverage"], 1.0)
+        for _ in range(3):
+            d = self.call()
+            self.assertEqual(d["timed_out"], 0, d)
+            self.assertLessEqual(d["wall_s"], d["budget"]["budget_s"])
 
-    def test_resume_does_not_re_pay_and_reports_it(self):
-        self.call()
-        d = self.call(resume=True)
-        self.assertEqual(d["status"], "up_to_date")
-        self.assertGreaterEqual(d["resumed_tests"], 12)
-        kinds = [l["kind"] for l in d["time_saved"]["breakdown"]]
-        self.assertIn("resume", kinds)
-        self.assertGreater(d["time_saved"]["this_call_ms"], 0)
-
-    def test_impossible_deadline_refuses_with_a_receipt(self):
-        d = self.call(deadline_s=0.05, max_workers=2)
-        self.assertEqual(d["status"], "deadline_infeasible")
-        self.assertIn("deadline_decision", d)
-        self.assertFalse(d["deadline_decision"]["feasible"])
-        self.assertEqual([l["kind"] for l in d["time_saved"]["breakdown"]], ["refusal"])
-        self.assertEqual(d["time_saved"]["this_call_ms"], 50.0)
+    def test_a_budget_that_is_too_low_resumes_instead_of_restarting(self):
+        self.call()                                     # record
+        # force a budget far below the recorded suite duration
+        plan = build_plan(FIXTURE, store_root=self.store)
+        plan["shards"][0]["budget_s"] = 0.1
+        plan["total_budget_s"] = 0.1
+        from hh.tool import execute_plan
+        res = execute_plan(plan, FIXTURE, store_root=self.store)
+        self.assertGreaterEqual(res["stats"]["timed_out"], 1)   # it was killed
+        self.assertEqual(res["stats"]["attempts"], 2)           # one resume, not a restart
+        self.assertEqual(res["ingested"], 12)                   # nothing was lost
+        self.assertGreater(res["stats"]["wasted_s"], 0)
 
     def test_unknown_tool_and_bad_args_return_errors_not_crashes(self):
         self.assertIn("error", json.loads(handle_tool_call("nope", {})))
-        self.assertIn("error", json.loads(handle_tool_call("run_tests", {"bogus": 1})))
+        self.assertIn("error", json.loads(handle_tool_call("run_tests", {"workers": 2})))
 
     def test_spec_is_registerable(self):
         self.assertEqual(TOOL_SPEC["name"], "run_tests")
-        self.assertIn("root", TOOL_SPEC["parameters"]["properties"])
-        self.assertIn("deadline_s", TOOL_SPEC["parameters"]["properties"])
+        props = TOOL_SPEC["parameters"]["properties"]
+        self.assertEqual(TOOL_SPEC["parameters"]["required"], ["root"])
+        for p in ("root", "runner", "budget_s", "resume"):
+            self.assertIn(p, props)
+        self.assertEqual(props["runner"]["enum"], ["unittest", "pytest", "node"])
 
 
+@unittest.skipUnless(os.path.isdir(FIXTURE), "fixtures not shipped in this build")
 class TestCli(unittest.TestCase):
+    def run_cli(self, *args):
+        import subprocess
+        env = dict(os.environ)
+        env["PYTHONPATH"] = ROOT
+        return subprocess.run([sys.executable, "-m", "hh", *args],
+                              capture_output=True, text=True, env=env)
+
     def test_version(self):
-        out = subprocess.run([sys.executable, "-m", "hh", "--version"],
-                             capture_output=True, text=True, cwd=ROOT)
-        self.assertEqual(out.returncode, 0)
-        self.assertRegex(out.stdout.strip(), r"^hh \d+\.\d+\.\d+$")
+        from hh import __version__
+        p = self.run_cli("--version")
+        self.assertEqual(p.stdout.strip(), f"hh {__version__}")
 
     def test_tool_spec_is_json_with_the_right_name(self):
-        out = subprocess.run([sys.executable, "-m", "hh", "tool-spec"],
-                             capture_output=True, text=True, cwd=ROOT)
-        self.assertEqual(json.loads(out.stdout)["name"], "run_tests")
+        p = self.run_cli("tool-spec")
+        self.assertEqual(json.loads(p.stdout)["name"], "run_tests")
 
-    @unittest.skipUnless(os.path.isdir(FIXTURE), "fixtures not shipped in this build")
-    def test_plan_emits_pure_json_with_a_predicted_wall(self):
-        tmp = tempfile.mkdtemp(prefix="h8-cli-")
+    def test_plan_is_json_and_predicts_only_after_measuring(self):
+        store = tempfile.mkdtemp(prefix="hh-cli-")
         try:
-            p = subprocess.run(
-                [sys.executable, "-m", "hh", "--store-root", tmp, "plan",
-                 "--root", FIXTURE, "--workers", "2"],
-                capture_output=True, text=True, cwd=ROOT)
-            self.assertEqual(p.returncode, 0, p.stderr)
-            plan = json.loads(p.stdout)              # stdout must be pure JSON
-            self.assertGreater(plan["predicted_wall_s"], 0)
-            self.assertIn("deadline_decision", plan)
+            env = dict(os.environ)
+            env["PYTHONPATH"] = ROOT
+            import subprocess
+            p = subprocess.run([sys.executable, "-m", "hh", "--store-root", store,
+                                "plan", "--root", FIXTURE],
+                               capture_output=True, text=True, env=env)
+            cold = json.loads(p.stdout)
+            self.assertEqual(cold["operating_level"], "record")
+            self.assertIsNone(cold["predicted_wall_s"])
+            self.assertEqual(len(cold["shards"]), 1)
+            self.assertTrue(cold["shards"][0]["full_suite"])
         finally:
-            shutil.rmtree(tmp, ignore_errors=True)
+            shutil.rmtree(store, ignore_errors=True)
 
 
 if __name__ == "__main__":

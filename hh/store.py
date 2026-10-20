@@ -1,13 +1,13 @@
-"""Duration store: repo-local SQLite (ARCHITECTURE §6).
+"""Duration store: repo-local SQLite.
 
-Raw observations are append-only and gitignored; aggregates are materialized and
-committable. Aggregates can always be rebuilt from raw rows when the estimator
-is re-tuned.
+Raw observations are append-only and gitignored; aggregates are materialized.
+Aggregates can always be rebuilt from raw rows when the estimator is re-tuned.
+The store has one job: remember how long each test took, so the next run's
+timeout does not have to be guessed.
 """
 from __future__ import annotations
 
 import json
-import math
 import os
 import platform
 import sqlite3
@@ -16,7 +16,8 @@ import time
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS runs (
   id INTEGER PRIMARY KEY, runner TEXT, git_sha TEXT, suite_sig TEXT,
-  collection_ms REAL, total_ms REAL, wall_ms REAL, started_at REAL
+  collection_ms REAL, total_ms REAL, wall_ms REAL, started_at REAL,
+  attempts INTEGER
 );
 CREATE TABLE IF NOT EXISTS contexts (
   id INTEGER PRIMARY KEY, machine_fp TEXT, workers INTEGER, runner_ver TEXT, extras JSON
@@ -33,15 +34,8 @@ CREATE INDEX IF NOT EXISTS obs_file ON observations(file_path);
 CREATE TABLE IF NOT EXISTS aggregates (
   level TEXT NOT NULL, level_key TEXT NOT NULL,
   n INTEGER, n_censored INTEGER, p50 REAL, p90 REAL, mean_ewma REAL, mad REAL,
+  mean REAL,
   updated_at REAL, PRIMARY KEY (level, level_key)
-);
-CREATE TABLE IF NOT EXISTS savings (
-  id INTEGER PRIMARY KEY, ts REAL, job_id TEXT, suite_id TEXT, kind TEXT,
-  amount_ms REAL, basis TEXT
-);
-CREATE TABLE IF NOT EXISTS attempts (
-  id INTEGER PRIMARY KEY, ts REAL, policy TEXT, suite_id TEXT, attempt INTEGER,
-  budget_s REAL, outcome TEXT, wall_ms REAL, wasted_ms REAL, overhead_ms REAL, note TEXT
 );
 """
 
@@ -61,6 +55,14 @@ class Store:
         self.path = os.path.join(self.root, "observations.sqlite")
         self.db = sqlite3.connect(self.path)
         self.db.executescript(SCHEMA)
+        # migration: stores created before `mean` existed (aggregates are
+        # rebuildable, so an added column plus a refresh is enough)
+        cols = {r[1] for r in self.db.execute("PRAGMA table_info(aggregates)")}
+        if "mean" not in cols:
+            self.db.execute("ALTER TABLE aggregates ADD COLUMN mean REAL")
+        rcols = {r[1] for r in self.db.execute("PRAGMA table_info(runs)")}
+        if "attempts" not in rcols:
+            self.db.execute("ALTER TABLE runs ADD COLUMN attempts INTEGER")
         self.db.commit()
 
     # -- runs / contexts -------------------------------------------------
@@ -73,12 +75,20 @@ class Store:
         return int(cur.lastrowid)
 
     def finish_run(self, run_id: int, total_ms: float, wall_ms: float,
-                   collection_ms: float | None = None) -> None:
+                   collection_ms: float | None = None,
+                   attempts: int = 1) -> None:
         self.db.execute(
-            "UPDATE runs SET total_ms=?, wall_ms=?, collection_ms=? WHERE id=?",
-            (total_ms, wall_ms, collection_ms, run_id),
+            "UPDATE runs SET total_ms=?, wall_ms=?, collection_ms=?, attempts=?"
+            " WHERE id=?",
+            (total_ms, wall_ms, collection_ms, int(attempts), run_id),
         )
         self.db.commit()
+
+    def durations(self, test_key: str, limit: int = 12) -> list[float]:
+        """This test's recent measured durations (ms), oldest first."""
+        return [r[0] for r in self.db.execute(
+            "SELECT duration_ms FROM observations WHERE test_key=?"
+            " ORDER BY ts DESC LIMIT ?", (test_key, limit)).fetchall()][::-1]
 
     def ctx_id(self, workers: int = 1, runner_ver: str | None = None) -> int:
         fp = machine_fp()
@@ -118,6 +128,10 @@ class Store:
         from .keys import file_of, name_of
 
         n = 0
+        if not os.path.exists(ledger_path):
+            # An adapter that died before its first row leaves no ledger. That
+            # is a shard failure the caller reports, not an ingest crash.
+            return 0
         with open(ledger_path, "r", encoding="utf-8") as f:
             if offset:
                 f.seek(offset)
@@ -146,6 +160,10 @@ class Store:
 
         Robust stats: p50/p90 empirical, EWMA mean (alpha=.3) for recency,
         MAD for spread. Censored rows count as lower bounds (kept as-is).
+
+        A rebuild over the touched keys was measured too: on a full-suite pass
+        every key is touched, so it costs the same queries plus a large IN(...)
+        list and is no faster (70 ms vs 41 ms at 9 k rows). Keep the one pass.
         """
         rows = self.db.execute(
             "SELECT test_key, file_path, duration_ms, censored, ts FROM observations"
@@ -177,21 +195,26 @@ class Store:
             ewma = 0.3 * v + 0.7 * ewma
         med = p50
         mad = sorted(abs(v - med) for v in durs)[n // 2]
+        # arithmetic mean: the *mass* estimator. The median is robust but for
+        # heavy-tailed suites (a few 1-2 s CLI tests among thousands of 1 ms
+        # ones) summing medians under-predicts the suite's true duration. The
+        # mean is what "total test mass" actually means.
+        mean = sum(durs) / n
         self.db.execute(
             "INSERT OR REPLACE INTO aggregates(level, level_key, n, n_censored,"
-            " p50, p90, mean_ewma, mad, updated_at) VALUES (?,?,?,?,?,?,?,?,?)",
-            (level, key, n, sum(1 for _, c in vals if c), p50, p90, ewma, mad, now),
+            " p50, p90, mean_ewma, mad, mean, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?)",
+            (level, key, n, sum(1 for _, c in vals if c), p50, p90, ewma, mad, mean, now),
         )
 
     # -- lookups ---------------------------------------------------------
     def agg_map(self, level: str) -> dict[str, dict]:
         out = {}
-        for key, n, nc, p50, p90, ewma, mad in self.db.execute(
-            "SELECT level_key, n, n_censored, p50, p90, mean_ewma, mad"
+        for key, n, nc, p50, p90, ewma, mad, mean in self.db.execute(
+            "SELECT level_key, n, n_censored, p50, p90, mean_ewma, mad, mean"
             " FROM aggregates WHERE level=?", (level,)
         ):
             out[key] = {"n": n, "n_censored": nc, "p50": p50, "p90": p90,
-                        "mean_ewma": ewma, "mad": mad}
+                        "mean_ewma": ewma, "mad": mad, "mean": mean}
         return out
 
     def censored_keys(self, min_count: int = 2) -> list[str]:
@@ -203,24 +226,3 @@ class Store:
                 " GROUP BY test_key HAVING c >= ?", (min_count,)
             )
         ]
-
-    def suite_total_history(self, suite_sig: str) -> list[float]:
-        return [
-            r[0]
-            for r in self.db.execute(
-                "SELECT total_ms FROM runs WHERE suite_sig=? AND total_ms IS NOT NULL"
-                " ORDER BY started_at DESC LIMIT 20", (suite_sig,)
-            )
-        ]
-
-    # -- attempts (experiment accounting) --------------------------------
-    def log_attempt(self, **kw) -> None:
-        self.db.execute(
-            "INSERT INTO attempts(ts, policy, suite_id, attempt, budget_s, outcome,"
-            " wall_ms, wasted_ms, overhead_ms, note) VALUES (?,?,?,?,?,?,?,?,?,?)",
-            (kw.get("ts", time.time()), kw.get("policy"), kw.get("suite_id"),
-             kw.get("attempt"), kw.get("budget_s"), kw.get("outcome"),
-             kw.get("wall_ms"), kw.get("wasted_ms"), kw.get("overhead_ms"),
-             kw.get("note")),
-        )
-        self.db.commit()

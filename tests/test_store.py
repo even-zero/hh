@@ -61,14 +61,32 @@ class TestIngest(unittest.TestCase):
 
 
 class TestSchema(unittest.TestCase):
-    def test_savings_table_exists(self):
+    def test_schema_is_the_three_tables_it_needs(self):
         tmp = tempfile.mkdtemp(prefix="h8-schema-")
         try:
             st = Store(tmp)
-            st.db.execute("SELECT kind, amount_ms FROM savings").fetchall()
+            tables = {r[0] for r in st.db.execute(
+                "SELECT name FROM sqlite_master WHERE type='table'")}
+            self.assertTrue({"runs", "observations", "aggregates"} <= tables)
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+
+    def test_durations_are_read_back_in_time_order(self):
+        tmp = tempfile.mkdtemp(prefix="h8-dur-")
+        try:
+            st = Store(tmp)
+            rid = st.start_run("pytest")
+            ctx = st.ctx_id()
+            for i, ms in enumerate((10.0, 20.0, 30.0)):
+                st.add_observation(rid, ctx, runner="pytest", test_key="pytest::t/a",
+                                   raw_id="t/a", status="passed", duration_ms=ms,
+                                   file_path="t", name="a", ts=1000.0 + i)
+            self.assertEqual(st.durations("pytest::t/a"), [10.0, 20.0, 30.0])
         finally:
             shutil.rmtree(tmp, ignore_errors=True)
 
 
 if __name__ == "__main__":
     unittest.main()
+
+

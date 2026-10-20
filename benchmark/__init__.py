@@ -1,15 +1,9 @@
-"""hh/benchmark — the pinned, config-driven benchmark suite for hh.
+"""The benchmark: one metric, ten repositories, mixed runners.
 
-    python3 -m benchmark list            # show repos + scenarios
-    python3 -m benchmark setup           # clone pinned refs, deps, shims, hang variants
-    python3 -m benchmark run [-q]        # execute all scenarios (see list)
-    python3 -m benchmark collect         # raw artifacts -> _work/results/results.json
-    python3 -m benchmark dashboard       # results.json -> _work/results/dashboard.html
-    python3 -m benchmark compare         # current results vs benchmark/baseline/
-    python3 -m benchmark all             # setup+run+collect+dashboard
+    python3 -m benchmark setup     # clone + install the repos in repos.json
+    python3 -m benchmark run       # measure both arms, write _work/results/*.json
+    python3 -m benchmark report    # write REPORT-<date>-timeout-metric.md
 
-Everything is generated under benchmark/_work/ (gitignored); nothing is written
-outside the benchmark directory except OS temp files. Numbers are never
-synthesized: metrics come from records.jsonl (one row per executed step), the
-hh stores' attempt logs (hh-full rows included), ledgers, and savings receipts.
+Everything generated lives under benchmark/_work/ (gitignored). Numbers are
+never synthesized: they come from the two arms actually running the suites.
 """

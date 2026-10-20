@@ -33,13 +33,25 @@ class Base(unittest.TestCase):
 class Derived(Base):
     pass
 """)
-        p = json.loads(build_plan(self.repo, workers=1, store_root=self.store).to_json())
+        cold = json.loads(json.dumps(build_plan(self.repo, store_root=self.store)))
+        self.assertEqual(cold["operating_level"], "record")
+        self.assertIsNone(cold["predicted_wall_s"])
+        first = execute_plan(cold, self.repo, store_root=self.store)
+        self.assertEqual(first["ingested"], 2)          # recorded, not predicted
+        self.assertIsNone(first["stats"]["error"])
+        # the pass seals a completeness marker: its ledger can be trusted as
+        # the manifest for the next plan
+        self.assertTrue(first["stats"]["suite_complete"])
+        self.assertTrue(first["stats"]["suite_complete"])
+        # second plan: measured, and it lists exactly the recorded tests
+        p = json.loads(json.dumps(build_plan(self.repo, store_root=self.store)))
+        self.assertNotEqual(p["operating_level"], "record")
         tests = [t for s in p["shards"] for t in s["tests"]]
         self.assertEqual(len(tests), 2)
         self.assertEqual(len({t["key"] for t in tests}), 2)
         result = execute_plan(p, self.repo, store_root=self.store)
         self.assertEqual(result["ingested"], 2)
-        self.assertEqual(result["stats"]["shard_failures"], 0)
+        self.assertIsNone(result["stats"]["error"])
 
     @unittest.skipUnless(__import__("importlib").util.find_spec("pytest"), "pytest not installed")
     def test_pytest_respects_opt_in_markers_and_setup_skips(self):
@@ -55,16 +67,21 @@ def test_ok(): assert True
 @pytest.mark.skip(reason='optional')
 def test_skip(): pass
 """)
-        p = json.loads(build_plan(self.repo, runner="pytest", workers=1,
-                                  store_root=self.store).to_json())
+        cold = build_plan(self.repo, runner="pytest", store_root=self.store)
+        self.assertEqual(cold["operating_level"], "record")
+        first = execute_plan(cold, self.repo, runner="pytest", store_root=self.store)
+        self.assertEqual(first["ingested"], 2)          # marker + skip honored
+        self.assertEqual(first["stats"]["attempts"], 1)
+        self.assertTrue(first["stats"]["suite_complete"])
+        with open(first["ledger"]) as f:
+            rows = [json.loads(l) for l in f]
+        self.assertEqual({r["status"] for r in rows if r["type"] == "end"},
+                         {"passed", "skipped"})
+        p = build_plan(self.repo, runner="pytest", store_root=self.store)
         self.assertEqual(sum(len(s["tests"]) for s in p["shards"]), 2)
         res = execute_plan(p, self.repo, runner="pytest", store_root=self.store)
         self.assertEqual(res["ingested"], 2)
         self.assertEqual(res["stats"]["attempts"], 1)
-        with open(res["ledger"]) as f:
-            rows = [json.loads(l) for l in f]
-        self.assertEqual({r["status"] for r in rows if r["type"] == "end"},
-                         {"passed", "skipped"})
 
     @unittest.skipUnless(__import__("importlib").util.find_spec("pytest"), "pytest not installed")
     def test_pytest_hard_kill_names_hanging_test(self):

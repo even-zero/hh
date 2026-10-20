@@ -1,10 +1,14 @@
-"""hh — Agent Timeout Estimator.
+"""hh — the timeout a test suite actually needs.
 
-Duration-aware test budgets and checkpointed execution for coding agents.
+hh measures a suite once and then hands out a budget: p90 of the measured
+per-test durations, plus headroom. That is the entire product. The first run
+records (it is the naive command plus a ledger); every run after that uses the
+measurement, so the process watching the suite is not killed by a timeout that
+was guessed too low.
+
 Stdlib-only core: zero install, zero sockets, no data leaves the repo.
 
-Public contract (stable): the ``run_tests`` tool (hh/tool.py), the CLI
-(``hh plan|run|savings|report|wrap|record``), and the JSON shapes they
-return. Internal modules may still move.
+Public contract: the ``run_tests`` tool (hh/tool.py) and the CLI
+(``hh plan|run|report|tool-spec``).
 """
-__version__ = "1.0.0"
+__version__ = "2.0.0"

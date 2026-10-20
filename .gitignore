@@ -1,7 +1,5 @@
-# runtime data: the per-repo store + experiment scratch (never committed)
+# runtime data: the per-repo store (never committed)
 .hh/
-.tda/
-.exp_store/
 
 # python
 __pycache__/

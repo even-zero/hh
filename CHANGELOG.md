@@ -1,47 +1,51 @@
 # Changelog
 
-All notable changes to this project are documented here. The format follows
-[Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
-[SemVer](https://semver.org/).
+## 2.0.0 — 2026-10-20
 
-## [1.0.0] — 2026-10-16
+The product is now one number: the timeout a suite needs. Everything that
+existed to serve other metrics was removed.
 
-First public release, under the name **hh**. Naming history: the internal
-research kit was *TDA (Test-Duration Advisor)*, then briefly *hyper8*, now *hh*.
-The agent-facing contract is considered stable from here on.
+**Removed**
+- cold-start sampling and the prior table (`PRIORS_MS` and the sample plan);
+- sharding, worker selection, deadline feasibility, hang quarantine, the
+  escalation ladder, per-test cutoffs;
+- time-saved receipts and the savings ledger;
+- capture-only adapters (Go, JUnit-XML, TRX, Jest reporter) and their fixtures;
+- the multi-scenario benchmark (probe/clean/workers/resume/hang/capture),
+  `compare`, `dashboard`, `interleave`, `budget_probe` and the reports they
+  produced;
+- the `experiments/` tree and its 13 conformance fixtures, the JUnit listener,
+  the standalone Mocha reporter, and the unused `attempts` table and logger.
 
-### Added
+**Changed**
+- `ExecutionPlan` is one shard with one budget: `p90 x 1.25` (3 s floor,
+  `4 x p50 + 30 s` cap).
+- The executor runs one runner process per attempt and resumes from the ledger
+  on overrun; it reports `attempts`, `timed_out`, `wasted_s`.
+- `run_tests` returns `budget` (`basis`, `budget_s`, `p50_s`, `p90_s`,
+  `confidence`) instead of an estimate object, a deadline decision and a
+  savings block.
+- CLI is `plan | run | report | tool-spec`.
+- New benchmark: ten repositories, mixed runners, one metric (SIGKILL avoided
+  and seconds saved when the naive timeout was too low).
 
-- **`run_tests` tool** (`hh/tool.py`): plan → checkpointed execute → record,
-  one call. Refuses up front (`budget_too_small`, `deadline_infeasible`) instead
-  of spending a caller's deadline on a run it cannot finish.
-- **Time-saved receipts** (`hh/savings.py`): per-run and per-job utility
-  reporting with four ledger-backed credit kinds (`continuation`, `resume`,
-  `hang_bound`, `refusal`); unbounded counterfactuals are noted, never summed.
-  Surfaces: tool response, `hh run`, `hh savings`, `hh report`.
-- **Deadline-aware worker selection** (`policy.choose_workers`): smallest worker
-  count that fits a CI deadline; imbalance stop when the marginal LPT gain drops
-  below 5 %; default cap = CPU count.
-- **Capture layer** for unittest, pytest, Jest, Mocha, node:test, Go
-  (`go test -json`, streaming + parser), JUnit Platform (ServiceLoader listener +
-  Surefire XML), plus a JUnit-XML/TRX parser family (Surefire, TestNG, PHPUnit,
-  RSpec, GoogleTest, Catch2, cargo-nextest, mocha-junit, pytest-xml, .NET,
-  VSTest). 13 recorded fixtures + 13 live checks.
-- **Resume** (`resume=true` / `--resume`): finish the last run's remainder;
-  already-paid tests are not re-executed (offset-aware ingest, no double-counting).
-- **Test suite** (`tests/`, 40 tests, stdlib only, < 1 s) and **CI**:
-  tests on Python 3.10–3.13, wheel build + clean-venv smoke, live adapter job.
-- **Release automation**: `v*` tag → verified version, tests, sdist + wheel,
-  clean-venv smoke test, GitHub Release with artifacts; opt-in PyPI publish.
+**Fixed**
+- Mocha adapter exits as soon as the run is over, so suites that leave a handle
+  open cannot be killed at the caller's timeout after all tests have finished.
+- A pytest fallback no longer reuses a poisoned session: when direct node ids
+  fail to collect (sample scripts, stale ids) the adapter re-runs in a fresh
+  process that collects the tree and deselects the rest.
+- unittest loader placeholders (`_FailedTest`, `ModuleSkipped`) never enter the
+  manifest; ids an old manifest has but the runner cannot resolve are reported
+  as `unresolved` instead of failing the run.
+- The benchmark honours a repo `root` subdirectory (docutils) and per-repo
+  environment (`PYTHONPATH`, pytest args) for both arms.
+- The adapter child process puts hh's package directory on `PYTHONPATH`, so the
+  tool works from a source checkout whatever the caller's cwd is.
+- CI is one page: tests on 3.10 and 3.13, CLI smoke, and a wheel installed into
+  a clean venv; the release workflow is a single tag-driven job.
 
-### Measured (sandbox lab, see RESULTS.md for method and caveats)
+## 1.0.0 — 2026-10-20
 
-- Tool overhead 0.9–1.3 % of suite runtime (gate 2 %); 24.9 ms on tiny suites
-  (auto-degrade to record-only).
-- Estimator: cold 56 % error → 4.2 % MAPE after one run; upper coverage 100 %.
-- Restart waste: naive 14.0 s / give-up on hangs (105.1 s) vs 0 for hh;
-  3 × 600 s hangs handled with a 8.6 s steady-state run.
-- Predicted vs actual wall within 2.8 % across worker counts; one avoided restart
-  pays for ~270 runs of the tool.
-- Live A/B with an agent in the loop: 41.2 s / 15.0 s discarded / 2 blind guesses
-  (naive) vs 26.8 s / 0 / 0 (hh).
+Duration-aware budgets with checkpointed execution, capture lanes and
+time-saved receipts. Superseded by 2.0.0.
