@@ -60,7 +60,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: "17"
@@ -79,7 +79,19 @@ jobs:
       - name: Tests, with a real JUnit 5 suite
         env:
           HH_JUNIT_CLASSPATH: ${{ runner.temp }}/junit-platform-console-standalone.jar
-        run: python -m unittest discover -s tests -v
+        run: |
+          set +e
+          python -m unittest discover -s tests -v > /tmp/tests.log 2>&1
+          status=$?
+          if [ "$status" -ne 0 ]; then
+            # The job log is not always reachable from outside; annotations are.
+            tail -n 10 /tmp/tests.log | while IFS= read -r line; do
+              line="${line//$'\r'/}"
+              line="${line//'%'/'%25'}"
+              echo "::error::$line"
+            done
+          fi
+          exit "$status"
 
   package:
     name: wheel

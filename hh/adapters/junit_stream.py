@@ -178,14 +178,17 @@ def _environment(root: str, cache: str) -> tuple[str, str, str]:
             "no compiled test classes found under " + root + " (looked for "
             + ", ".join(TEST_CLASS_DIRS) + "). Build the tests first: "
             "`mvn test-compile` or `gradle testClasses`.")
-    cp = classpath(root, cache)
-    if not has_platform(cp):
+    deps = classpath(root, cache)
+    if not has_platform(deps):
         raise RuntimeError(
             "the test classpath does not contain the JUnit Platform. Set "
             "HH_JUNIT_CLASSPATH (for Gradle: the test runtime classpath), or "
             "put junit-platform-console-standalone-*.jar in the project.")
-    classes = driver_classes(cache, cp)
-    return java(), os.pathsep.join([classes] + cp), os.pathsep.join(test_class_dirs(root))
+    tests = test_class_dirs(root)
+    classes = driver_classes(cache, deps)
+    # The compiled tests must be *on the JVM classpath*, not just scanned:
+    # JUnit's classpath-root selector loads classes through the class loader.
+    return java(), os.pathsep.join([classes] + tests + deps), os.pathsep.join(tests)
 
 
 def discover(root: str, out_path: str) -> int:
