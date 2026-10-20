@@ -136,7 +136,11 @@ def collect_manifest(root: str, runner: str, meter: Meter,
                 entries.append(row)
             if not entries and noise:
                 raise RuntimeError("Mocha collection produced no test ids")
-            raw_ids = [e["key"] for e in entries]
+            # The Mocha adapter owns its identity scheme (path-relative file +
+            # full title, collision-suffixed). Re-normalising it here would
+            # produce keys the ledger never writes.
+            raw_of = {e["key"]: e["raw_id"] for e in entries}
+            raw_ids = list(raw_of)
         else:
             # unittest: import the modules and enumerate (no execution)
             for name, mod in list(sys.modules.items()):
@@ -151,7 +155,8 @@ def collect_manifest(root: str, runner: str, meter: Meter,
             if not raw_ids and errors:
                 raise RuntimeError("unittest collection failed: " + "; ".join(errors[:5]))
     raw_ids = list(dict.fromkeys(raw_ids))
-    raw_of = {key: raw for raw, key in unique_key_map(raw_ids, runner).items()}
+    if runner != "node":
+        raw_of = {key: raw for raw, key in unique_key_map(raw_ids, runner).items()}
     collection_s = round(meter.spans_ms.get("collect", 0.0) / 1000.0, 3)
     if cache_path:
         try:
@@ -282,6 +287,8 @@ def run_tests(root: str, runner: str = "unittest", budget_s: float | None = None
         "timed_out": stats["timed_out"],
         "wasted_s": round(stats["wasted_s"], 3),
         "resumed_tests": stats["resumed"],
+        "startup_s": round(stats["startup_s"], 3),
+        "unresolved": stats["unresolved"],
         "predicted_wall_s": plan.get("predicted_wall_s"),
         "tests": len(plan["shards"][0]["tests"]) if not record_pass else None,
         "recorded": res["ingested"],

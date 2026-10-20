@@ -159,7 +159,8 @@ def execute(plan: dict, root: str,
 
     stats = {"attempts": 0, "timed_out": 0, "wall_s": 0.0, "wasted_s": 0.0,
              "startup_s": 0.0, "resumed": 0, "resumed_ms": 0.0,
-             "suite_complete": False, "failed_tests": 0, "error": None}
+             "unresolved": 0, "suite_complete": False, "failed_tests": 0,
+             "error": None}
 
     if full:
         tests: list[dict] = []
@@ -191,10 +192,18 @@ def execute(plan: dict, root: str,
             if not remaining:
                 log(f"  {len(tests)} tests done in {wall:.1f}s")
                 break
-            if ok:                       # a clean exit with work left: not a timeout
-                stats["error"] = (out or "").strip().splitlines()[-1:] or ["adapter exited early"]
-                stats["failed_tests"] = len(remaining)
-                log(f"  adapter exited early, {len(remaining)} tests not run")
+            if ok:
+                # The runner finished cleanly but did not run some ids it was
+                # given: those ids do not exist any more (a stale manifest).
+                # Record them as unresolved instead of inventing a failure, and
+                # do not claim the run covered them.
+                for t in remaining:
+                    _append(ledger, {"type": "end", "key": t["key"],
+                                     "raw_id": t["raw_id"], "status": "unresolved",
+                                     "censored": False, "duration_ms": 0.0,
+                                     "ts": time.time()})
+                stats["unresolved"] = len(remaining)
+                log(f"  {len(remaining)} ids no longer resolve (recorded as unresolved)")
                 break
         if wall < (budget + startup_s) * 0.999:   # died on its own (import error, crash)
             stats["error"] = (out or "").strip().splitlines()[-1:] or ["adapter exited early"]

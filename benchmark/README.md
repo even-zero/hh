@@ -34,8 +34,12 @@ Each repository is measured with its **real suite and its real runner**
 ## Reading a result
 
 - A naive cell with a `✗` contains the wasted attempt(s) *and* the restart.
+- Four naive attempts with no result mean it **gave up** on that guess: there is
+  no saving to quote, because only one arm produced a suite result.
 - hh's warm wall is the same number in every column of a row — that is the
   point: the measurement replaces the guess.
 - The record pass is reported separately; it is the one-time price.
-- Where `G` was already high enough, hh saves nothing and pays its recording
+- Where `G` was already high enough, hh saves nothing and pays its ledger
   overhead. The report says so instead of averaging it away.
+- For the node repos naive runs `npm test` while hh drives mocha directly, so
+  part of hh's margin there is npm's own startup. The report states how much.

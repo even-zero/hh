@@ -54,6 +54,7 @@ hh report                                          # what the store has measured
 | `attempts` / `timed_out` | runner processes started / killed at the budget |
 | `wall_s` | what the caller waited |
 | `resumed_tests` | tests recognised as already paid for |
+| `unresolved` | ids from an old manifest the runner no longer finds (re-record them; not counted as failures) |
 
 ## How the budget is computed
 
@@ -74,9 +75,11 @@ A cold store has no rows, so step 2 has nothing to work with: the tool says so
   `operating_level: "record"` and a null prediction.
 - **A wrong budget costs one budget, not the suite.** Finished tests are in the
   ledger; an overrun resumes from the last unfinished test.
-- **hh cannot beat a correct guess.** If the suite already fits your timeout,
-  hh costs its recording (~35 µs per test) and nothing else. It is insurance
-  against a too-low timeout, not a speed-up.
+- **hh cannot beat a correct guess** on test work. If the suite already fits
+  your timeout, hh costs its ledger and nothing else. (It can still be faster
+  overall when the naive command goes through a wrapper such as `npm test`:
+  hh drives the runner directly. That is a launcher difference, not a timeout
+  one.) It is insurance against a too-low timeout, not a speed-up.
 - **Small suites are dominated by fixed costs.** Below ~1 s of test time the
   tool's own process start and SQLite writes are a visible percentage.
 

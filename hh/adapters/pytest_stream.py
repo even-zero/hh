@@ -77,6 +77,8 @@ def main(argv=None):
     ap.add_argument("--ledger")
     ap.add_argument("--collect-out")
     ap.add_argument("--tests-file")
+    ap.add_argument("--deselect-only", action="store_true",
+                    help="collect the tree and deselect the rest (fallback path)")
     args = ap.parse_args(argv)
     if bool(args.collect_out) == bool(args.ledger):
         ap.error("exactly one of --collect-out or --ledger is required")
@@ -85,6 +87,10 @@ def main(argv=None):
     # An explicit root limits discovery to the requested tree while preserving
     # the repo's pytest.ini/pyproject collection configuration.
     opts = ["-p", "no:cacheprovider", "-q"]
+    # The naive command may need flags of its own (e.g. --ignore=…); hh must run
+    # the same suite, so it accepts them verbatim.
+    extra = os.environ.get("HH_PYTEST_ARGS", "").split()
+    opts += extra
     if args.collect_out:
         opts.append("--collect-only")
     else:
@@ -100,7 +106,7 @@ def main(argv=None):
     # with both tests/ and test/ (or nested suites) must not lose a tree just
     # because one directory name was checked first.
     roots = [d for d in ("tests", "test") if os.path.isdir(d)] or ["."]
-    if selected:
+    if selected and not args.deselect_only:
         ids = list(selected)
         argv_bytes = sum(len(i) + 1 for i in ids)
         if len(ids) <= NODEID_MAX and argv_bytes <= NODEID_ARGV_BYTES:
@@ -109,11 +115,21 @@ def main(argv=None):
             # pytest collect only what will run.
             rc = int(pytest.main(opts + ids,
                                  plugins=[Selection(None, None, None, args.ledger)]))
-            if rc != 4:
-                # 4 = usage error: at least one node id no longer exists, so
-                # nothing ran. A stale manifest must degrade to the slow path,
-                # never to a skipped suite.
+            if rc not in (2, 4):
                 return rc
+            # 4 = usage error (an id no longer exists); 2 = interrupted by
+            # collection errors (an id that used to be collectible is not).
+            # Nothing trustworthy ran, and a second pytest.main() in the same
+            # process inherits the broken session: retry in a fresh process
+            # that collects the tree and deselects everything else.
+            import subprocess
+            env = dict(os.environ)
+            env["PYTHONPATH"] = os.path.dirname(os.path.dirname(os.path.dirname(
+                os.path.abspath(__file__)))) + os.pathsep + env.get("PYTHONPATH", "")
+            return int(subprocess.run(
+                [sys.executable, "-m", "hh.adapters.pytest_stream", "--root",
+                 args.root, "--ledger", args.ledger, "--tests-file",
+                 args.tests_file, "--deselect-only"], env=env).returncode)
     # A cold record pass (no test list) discovers identities during its own
     # collection, so the ledger and the next plan agree on every key.
     keys_out = (args.ledger + ".keys.jsonl"

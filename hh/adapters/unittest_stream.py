@@ -107,6 +107,17 @@ def walk_test_files(root: str) -> list[str]:
     return list(dict.fromkeys(found))
 
 
+def _real(test) -> bool:
+    """Loader placeholders (_FailedTest / ModuleSkipped) are not tests.
+
+    A module that fails or skips on import is reported by unittest as a fake
+    test case whose class lives in ``unittest.loader``; its id is not
+    runnable, and ``loader.errors`` already carries the reason.
+    """
+    return (isinstance(test, unittest.TestCase)
+            and type(test).__module__ != "unittest.loader")
+
+
 def _standard_suite(root: str, errors: list[str]) -> list:
     tests = []
     for pat in PATTERNS:
@@ -179,7 +190,10 @@ def discover_ids(root: str) -> tuple[list[str], list[str]]:
     ids: list[str] = []
     errors: list[str] = []
     standard = _standard_suite(root, errors)
-    ids.extend(t.id() for t in standard)
+    # A module that fails to import is reported as an _ErrorHolder pseudo-test
+    # ("unittest.loader.ModuleSkipped..."), which is not a runnable test: it
+    # belongs in `errors`, never in the manifest.
+    ids.extend(t.id() for t in standard if _real(t))
     covered = _covered_files(root, ids)
     for path in walk_test_files(root):
         if os.path.abspath(path) in covered:

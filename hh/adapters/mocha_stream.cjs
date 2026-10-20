@@ -39,10 +39,20 @@ async function main() {
   const mochaModule = req('mocha');
   const Mocha = mochaModule.default || mochaModule.Mocha || mochaModule;
   const mocha = new Mocha({ reporter: 'dot', color: false });
-  // Recursive discovery: every .js/.cjs/.mjs under test/, at any depth.
-  const testDir = path.join(root, 'test');
-  for (const file of files(testDir)) mocha.addFile(file);
-  await mocha.loadFilesAsync();
+  // .mocharc.json may declare files that must load inside the mocha context
+  // before the suite (nock's tests/setup.js registers hooks at load time).
+  try {
+    const rc = JSON.parse(fs.readFileSync(path.join(root, '.mocharc.json'), 'utf8'));
+    const pre = Array.isArray(rc.file) ? rc.file : (rc.file ? [rc.file] : []);
+    for (const f of pre) mocha.addFile(path.resolve(root, f));
+  } catch (e) { /* no .mocharc.json, or it needs no preload */ }
+  // Recursive discovery: every .js/.cjs/.mjs under test/ (or tests/), any depth.
+  const dirs = ['test', 'tests'].map(d => path.join(root, d)).filter(d => fs.existsSync(d));
+  for (const dir of dirs) for (const file of files(dir)) mocha.addFile(file);
+  await new Promise((resolve, reject) => {
+    if (typeof mocha.loadFilesAsync === 'function') mocha.loadFilesAsync().then(resolve, reject);
+    else mocha.loadFiles(() => resolve());      // Mocha < 6
+  });
   const all = tests(mocha.suite);
   const counts = new Map();
   for (const test of all) counts.set(baseKey(test), (counts.get(baseKey(test)) || 0) + 1);
@@ -90,11 +100,25 @@ async function main() {
   }
   const fd = fs.openSync(ledger, 'a');
   const write = row => fs.writeSync(fd, JSON.stringify(row) + '\n');
-  const runner = mocha.run(failures => { fs.closeSync(fd); process.exitCode = failures ? 1 : 0; });
   // Completeness marker (see base.suite_end_row): emitted only when the run
   // loop reaches its end, so a killed record pass cannot seal a manifest.
-  runner.on('end', () => write({ type: 'suite_end',
-    tests: runner.stats ? runner.stats.tests : 0, ts: Date.now() / 1000 }));
+  let sealed = false;
+  const seal = () => {
+    if (sealed) return;
+    sealed = true;
+    write({ type: 'suite_end', tests: runner ? (runner.stats ? runner.stats.tests : 0) : 0,
+      ts: Date.now() / 1000 });
+  };
+  const runner = mocha.run(failures => {
+    // The run is over, so the process has done its job. Exit explicitly:
+    // suites that leave a handle open (a server, a timer) would otherwise keep
+    // node alive until the caller kills it at its timeout — a self-inflicted
+    // SIGKILL that has nothing to do with the test work.
+    seal();
+    fs.closeSync(fd);
+    process.exit(failures ? 1 : 0);
+  });
+  runner.on('end', seal);
   const started = new Map();
   runner.on('test', test => {
     started.set(test, process.hrtime.bigint());
@@ -109,4 +133,4 @@ async function main() {
       censored: false, ts: Date.now() / 1000 });
   });
 }
-main().catch(e => { console.error(e); process.exitCode = 2; });
+main().catch(e => { console.error(e); process.exit(2); });
