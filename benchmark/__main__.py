@@ -503,6 +503,9 @@ def report(out: dict) -> str:
     A("python3 -m benchmark report    # writes this file")
     A("```")
     A("")
+    A("The commit hh reports is the tree the run measured — the commit just before")
+    A("the one that carries this file.")
+    A("")
     A("| repo | commit |")
     A("|---|---|")
     for r in rows:

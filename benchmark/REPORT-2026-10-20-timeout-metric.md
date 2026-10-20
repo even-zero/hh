@@ -1,6 +1,6 @@
 # The only metric: does the timeout kill the suite?
 
-**Date:** 2026-10-20 · **hh:** 2.0.0 (d5c2940) · **Repos:** 10 (node, pytest, unittest) · **Configurations:** 60 (10 repos x 6 guesses)
+**Date:** 2026-10-20 · **hh:** 2.0.0 (a207052) · **Repos:** 10 (node, pytest, unittest) · **Configurations:** 60 (10 repos x 6 guesses)
 
 A caller must give a test suite a timeout. If the timeout is too low the
 suite is SIGKILLed, the work is lost, and it has to run again. hh exists to
@@ -153,6 +153,9 @@ python3 -m benchmark setup     # clone + install the repos in repos.json
 python3 -m benchmark run       # measure; writes _work/results/timeout-metric.json
 python3 -m benchmark report    # writes this file
 ```
+
+The commit hh reports is the tree the run measured — the commit just before
+the one that carries this file.
 
 | repo | commit |
 |---|---|
