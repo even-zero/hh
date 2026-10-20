@@ -207,8 +207,11 @@ def execute(plan: dict, root: str, adapter: str = "hh.adapters.unittest_stream",
              # time-saved instrument (hh/savings.py)
              "resumed": 0, "resumed_ms": 0.0,
              "preserved_tests": 0, "preserved_ms": 0.0,
-             # accounting: runner startup (collection) vs test execution
-             "startup_s": 0.0, "startup_attempts": 0,
+             # accounting: runner startup (collection) vs test execution.
+             # startup_s is *compute spent* (summed over attempts, so parallel
+             # shards each count); startup_max_s is the per-attempt maximum,
+             # which is what a wall-clock (makespan) split must subtract.
+             "startup_s": 0.0, "startup_max_s": 0.0, "startup_attempts": 0,
              "censored_wait_s": 0.0}
     import threading
     lock = threading.Lock()
@@ -251,6 +254,8 @@ def execute(plan: dict, root: str, adapter: str = "hh.adapters.unittest_stream",
             if startup_meas:
                 bump("startup_s", startup_meas)
                 bump("startup_attempts")
+                with lock:
+                    stats["startup_max_s"] = max(stats["startup_max_s"], startup_meas)
             # A full-suite shard runs under a wall-clock budget (naive
             # semantics: discovery included); an enumerated shard gets its exec
             # budget plus the runner startup the executor added to the clock.
@@ -354,6 +359,8 @@ def execute(plan: dict, root: str, adapter: str = "hh.adapters.unittest_stream",
                     if st2:
                         bump("startup_s", st2)
                         bump("startup_attempts")
+                        with lock:
+                            stats["startup_max_s"] = max(stats["startup_max_s"], st2)
                     bump("censored_wait_s", max(0.0, wall2 - st2))
                     if t["key"] not in _done_keys(ledger):
                         _append(ledger, {

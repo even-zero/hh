@@ -337,7 +337,11 @@ def execute_plan(plan: dict, root: str, runner: str = "unittest",
     root_abs = os.path.abspath(root)
     t0 = time.perf_counter()
     ledger = os.path.join(plan["checkpoint_dir"], "ledger.jsonl")
-    before = _done_map_path(ledger)
+    # A fresh plan gets a fresh checkpoint dir, so there is nothing to read
+    # before the run; parsing the ledger twice is pure warm-pass overhead
+    # (~20 ms on 1,100 tests, measured) and it is the *first* read that is
+    # avoidable.
+    before = _done_map_path(ledger) if os.path.exists(ledger) else {}
     phase_stats = execute(plan, root_abs, adapter=adapter, log=log)
     after = _done_map_path(ledger)
     new_here = set(after) - set(before)
@@ -380,7 +384,8 @@ def execute_plan(plan: dict, root: str, runner: str = "unittest",
     # budgets for (`Store.runner_overhead_ms`).
     st.finish_run(run_id, total_ms=new_ms,
                   wall_ms=phase_stats["wall_s"] * 1000,
-                  collection_ms=float(phase_stats.get("startup_s", 0.0) or 0.0) * 1000.0)
+                  collection_ms=float(phase_stats.get("startup_s", 0.0) or 0.0) * 1000.0,
+                  attempts=int(phase_stats.get("attempts", 1) or 1))
 
     wall = time.perf_counter() - t0
     stats = dict(phase_stats)
@@ -396,7 +401,12 @@ def execute_plan(plan: dict, root: str, runner: str = "unittest",
                "predicted_exec_wall_s": plan.get("predicted_exec_wall_s")}]
     stats["phases"] = phases
     stats["startup_s"] = round(float(stats.get("startup_s", 0.0) or 0.0), 3)
-    stats["exec_wall_s"] = round(max(0.0, wall - stats["startup_s"]), 3)
+    # Wall-clock split: subtract the *longest single* startup, not the sum over
+    # parallel shards (two shards collecting for 1.9 s each in parallel do not
+    # put 3.8 s of collection on a 4.0 s wall).
+    startup_wall = float(stats.get("startup_max_s") or stats["startup_s"])
+    stats["startup_max_s"] = round(startup_wall, 3)
+    stats["exec_wall_s"] = round(max(0.0, wall - startup_wall), 3)
     oh = round(meter.total_ms + float(plan.get("overhead_ms", 0.0) or 0.0), 3)
     rec = {"ts": time.time(), "policy": "hh-full", "suite_id": suite_id,
            "attempt": 1, "budget_s": plan.get("total_budget_s"), "outcome": "ok",
@@ -548,6 +558,11 @@ def run_tests(root: str, runner: str = "unittest", workers: int = 2,
         # an adapter that dies before running its tests must never look like a
         # green run: the missing tests were force-marked "error", not executed
         status = "shard_failed"
+    elif n_manifest == 0 and not fails:
+        # A runner that cannot see the suite (unittest pointed at pytest
+        # functions, a wrong --root) exits 0 having done nothing. Reporting
+        # "ok" for that is the worst failure mode a budget tool can have.
+        status = "no_tests"
     elif fails:
         status = "tests_failed"
     else:
@@ -561,6 +576,10 @@ def run_tests(root: str, runner: str = "unittest", workers: int = 2,
         "operating_level": plan.get("operating_level"),
         "record_pass": record_pass,
         "deadline_note": deadline_note,
+        "hint": (None if status != "no_tests" else
+                 f"the {runner} adapter discovered no tests under {root}; "
+                 f"pass the right runner (unittest|pytest|node) or check the "
+                 f"suite layout"),
         "wall_s": res["wall_s"],
         "exec_wall_s": res.get("exec_wall_s"),
         "startup_s": res.get("startup_s"),

@@ -1,8 +1,11 @@
 """Collect and execute pytest node IDs without replaying unrelated tests.
 
-Collection is performed once at plan time and again on execution (as pytest
-requires). Selection uses a file rather than an oversized argv for large suites.
-The existing live pytest plugin writes checkpoint rows during execution.
+Collection is performed once at plan time (cached) and again on execution (as
+pytest requires). A measured run passes the node ids it is going to run
+directly, so pytest collects *those* items only instead of the whole tree; the
+file-and-deselect path remains as the fallback when the argv would be too big
+or when a manifest has gone stale. The live plugin writes checkpoint rows
+during execution.
 """
 from __future__ import annotations
 
@@ -10,6 +13,14 @@ import argparse
 import json
 import os
 import sys
+
+
+# Passing node ids directly makes pytest collect only the selected items. On
+# click that skips 31k deselected parametrizations — 0.7 s of a 6.5 s suite —
+# so a *measured* run can be faster than the naive one it replaces. Beyond these
+# caps the argv itself becomes the problem: collect the tree and deselect.
+NODEID_MAX = 8000
+NODEID_ARGV_BYTES = 600_000
 
 
 class Selection:
@@ -20,10 +31,12 @@ class Selection:
         self.ledger = ledger
 
     def pytest_sessionfinish(self, session, exitstatus):
-        # Completeness marker: the session ended on its own (test failures are
-        # a normal end), as opposed to a kill. A cold record pass only trusts
-        # its ledger as a manifest when this row exists.
-        if self.ledger:
+        # Completeness marker: the session ran its tests to the end (failures
+        # are a normal end). Interrupted (2), internal error (3) and usage
+        # error (4) sessions are *not* complete: a cold record pass only trusts
+        # its ledger as a manifest when this row exists, and sealing a manifest
+        # from an aborted run would silently drop every test it never reached.
+        if self.ledger and exitstatus in (0, 1):
             from .base import suite_end_row
             suite_end_row(self.ledger, session.testscollected)
 
@@ -87,13 +100,20 @@ def main(argv=None):
     # with both tests/ and test/ (or nested suites) must not lose a tree just
     # because one directory name was checked first.
     roots = [d for d in ("tests", "test") if os.path.isdir(d)] or ["."]
-    if selected is not None and len(selected) <= 400:
-        # Small selection (a hang probe, a resume tail, one test): pass the
-        # node ids directly so pytest never imports/collects the rest of the
-        # suite. Deselect-after-collect pays the whole collection cost — 2.9 s
-        # of a 4.6 s click suite — for 40 tests that take 40 ms.
-        rc = pytest.main(opts + list(selected), plugins=[])
-        return int(rc)
+    if selected:
+        ids = list(selected)
+        argv_bytes = sum(len(i) + 1 for i in ids)
+        if len(ids) <= NODEID_MAX and argv_bytes <= NODEID_ARGV_BYTES:
+            # Deselect-after-collect pays the whole collection cost (2.9 s of a
+            # 4.6 s click suite) even for a 40-test tail. Direct node ids make
+            # pytest collect only what will run.
+            rc = int(pytest.main(opts + ids,
+                                 plugins=[Selection(None, None, None, args.ledger)]))
+            if rc != 4:
+                # 4 = usage error: at least one node id no longer exists, so
+                # nothing ran. A stale manifest must degrade to the slow path,
+                # never to a skipped suite.
+                return rc
     # A cold record pass (no test list) discovers identities during its own
     # collection, so the ledger and the next plan agree on every key.
     keys_out = (args.ledger + ".keys.jsonl"

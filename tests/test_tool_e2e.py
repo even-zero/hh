@@ -133,6 +133,20 @@ class TestToolEndToEnd(unittest.TestCase):
         self.assertEqual([l["kind"] for l in d["time_saved"]["breakdown"]], ["refusal"])
         self.assertEqual(d["time_saved"]["this_call_ms"], 50.0)
 
+    def test_runner_that_sees_nothing_is_not_ok(self):
+        """A wrong runner exits 0 having run zero tests — never report that as
+        a green suite (the worst failure mode for a budget tool)."""
+        root = tempfile.mkdtemp(prefix="h8-pytest-only-")
+        try:
+            with open(os.path.join(root, "test_only.py"), "w", encoding="utf-8") as f:
+                f.write("def test_one():\n    assert True\n")
+            d = self.call(root=root, runner="unittest")   # pytest-style, not unittest
+        finally:
+            shutil.rmtree(root, ignore_errors=True)
+        self.assertEqual(d["status"], "no_tests")
+        self.assertIn("unittest|pytest|node", d["hint"])
+        self.assertEqual(d["results"]["ingested"], 0)
+
     def test_unknown_tool_and_bad_args_return_errors_not_crashes(self):
         self.assertIn("error", json.loads(handle_tool_call("nope", {})))
         self.assertIn("error", json.loads(handle_tool_call("run_tests", {"bogus": 1})))

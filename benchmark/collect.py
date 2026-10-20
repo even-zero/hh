@@ -94,14 +94,19 @@ def savings(store: str, job: str) -> dict | None:
         return None
 
 
-def hh_version() -> tuple[str, str]:
+def hh_version() -> tuple[str, str, bool]:
     env = dict(os.environ)
     env["PYTHONPATH"] = config.REPO_ROOT
     v = subprocess.run(["python3", "-m", "hh", "--version"],
                        capture_output=True, text=True, env=env).stdout.strip()
     head = subprocess.run(["git", "-C", config.REPO_ROOT, "rev-parse", "--short", "HEAD"],
                           capture_output=True, text=True).stdout.strip()
-    return v, head
+    # a results file whose numbers came from an uncommitted tree must say so:
+    # otherwise the export claims a commit that never ran
+    dirty = bool(subprocess.run(["git", "-C", config.REPO_ROOT, "status", "--porcelain",
+                                 "--", "hh"],
+                                capture_output=True, text=True).stdout.strip())
+    return v, head, dirty
 
 
 def collect(cfg: dict) -> dict:
@@ -230,6 +235,16 @@ def collect(cfg: dict) -> dict:
                 "level": (blk.get("plan_cold") or {}).get("level"),
                 "n_runs": min(len(plains), cold.get("n_runs") or 0),
             }
+        # warm pass vs the same naive run: what measuring bought. A warm pass
+        # does the same work as naive plus the ledger, so this is where a
+        # regression would show up first.
+        warm = blk.get("run_warm") or {}
+        if plains and warm.get("wall_s"):
+            nv = med(plains, "wall_ms") / 1000.0
+            blk["warm"] = {"naive_s": round(nv, 3), "hh_s": warm.get("wall_s"),
+                           "delta_pct": round((warm["wall_s"] / nv - 1) * 100, 2),
+                           "predicted_wall_s": (blk.get("plan_warm") or {}).get("pred_wall_s"),
+                           "n_runs": min(len(plains), warm.get("n_runs") or 0)}
         # resume
         rp = rec_find(recs, rid, "resume-params")
         rs = rec_find(recs, rid, "resume-stats")
@@ -362,14 +377,15 @@ def collect(cfg: dict) -> dict:
                 "audits": audits,
                 "hang_identified": (open_.get("open_intervals") or [None])[0]}
     out["facts"] = facts
-    v, head = hh_version()
+    v, head, dirty = hh_version()
     try:
         repos_file = os.path.relpath(cfg.get("_path", os.path.join(config.HERE, "repos.json")),
                                      config.REPO_ROOT)
     except ValueError:
         repos_file = str(cfg.get("_path", "benchmark/repos.json"))
     out["meta"] = {"date": time.strftime("%Y-%m-%d"), "hh_version": v.replace("hh ", ""),
-                   "hh_commit": head, "python": platform.python_version(),
+                   "hh_commit": head, "hh_dirty": dirty,
+                   "python": platform.python_version(),
                    "platform": platform.platform(), "cores": os.cpu_count(),
                    "repos_file": repos_file,
                    "repos": {r["id"]: f"{r['clone']['url']}@{r['clone'].get('ref', 'HEAD')[:10]}"

@@ -138,6 +138,14 @@ def adapt(R: dict) -> dict:
     if A["record_all"]:
         A["record_delta"] = round(statistics.median(
             v["delta_pct"] for v in A["record_all"].values()), 2)
+    A["warm_all"] = {rid: (R_runs.get(rid) or {}).get("warm") or {}
+                     for rid, r in R.get("repos", {}).items()
+                     if r.get("lane", "").endswith("_exec")}
+    A["warm_all"] = {k: v for k, v in A["warm_all"].items()
+                     if v.get("delta_pct") is not None}
+    if A["warm_all"]:
+        A["warm_delta"] = round(statistics.median(
+            v["delta_pct"] for v in A["warm_all"].values()), 2)
 
     # prediction errors
     A["pred_errs"] = {}
@@ -427,7 +435,11 @@ def page(A: dict, charts: list[str]) -> str:
     if A.get("record_delta") is not None:
         kpis.append(kpi("cold pass vs naive", f"{A['record_delta']:+.1f}%",
                         f"median of {len(A['record_all'])} exec lanes · "
-                        "no prediction, no shard shaping", C["ok"]))
+                        "record-only: no prediction, no shard shaping", C["ok"]))
+    if A.get("warm_delta") is not None:
+        kpis.append(kpi("warm pass vs naive", f"{A['warm_delta']:+.1f}%",
+                        f"median of {len(A['warm_all'])} exec lanes · "
+                        "measured budget, W=1", C["hh"]))
     if A["compat"]:
         kpis.append(kpi("cold plans that predicted",
                         f"0 of {len(A['compat'])}",
@@ -474,7 +486,7 @@ th,td{{border:1px solid var(--line);padding:5px 9px;text-align:left}}
 th{{color:#dbe4f0;background:#141c2b}}
 </style></head><body><div class="wrap">
 <h1>hh — real-world benchmark</h1>
-<p class="sub">{E(meta.get('date',''))} · hh {E(meta.get('hh_version','?'))} ({E(meta.get('hh_commit',''))}) ·
+<p class="sub">{E(meta.get('date',''))} · hh {E(meta.get('hh_version','?'))} ({E(meta.get('hh_commit',''))}{'+uncommitted' if meta.get('hh_dirty') else ''}) ·
 Python {E(meta.get('python',''))} · measured by <code>python3 -m benchmark</code> — config: <code>{E(meta.get('repos_file','benchmark/repos.json'))}</code></p>
 <div class="kpis">{''.join(kpis)}</div>
 {core}

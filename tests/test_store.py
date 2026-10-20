@@ -72,3 +72,42 @@ class TestSchema(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestRunnerOverhead(unittest.TestCase):
+    """Per-test runner overhead must come from clean single-attempt runs only."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp(prefix="h8-overhead-")
+        self.store = Store(self.tmp)
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def _run(self, *, wall_ms: float, test_ms: float, n: int = 2,
+             collection_ms: float = 100.0, attempts: int = 1) -> None:
+        rid = self.store.start_run("pytest", suite_sig=None)
+        ctx = self.store.ctx_id(workers=1)
+        for i in range(n):
+            self.store.add_observation(rid, ctx, runner="pytest",
+                                       test_key=f"pytest::t/t{i}", raw_id=f"t{i}",
+                                       status="passed", duration_ms=test_ms,
+                                       file_path="t", name=f"t{i}")
+        self.store.commit()
+        self.store.finish_run(rid, total_ms=test_ms * n, wall_ms=wall_ms,
+                              collection_ms=collection_ms, attempts=attempts)
+
+    def test_single_attempt_run_gives_the_rate(self):
+        # 2 tests x 250 ms + 100 ms startup + 100 ms of plumbing over 2 tests
+        self._run(wall_ms=700.0, test_ms=250.0)
+        self.assertAlmostEqual(self.store.runner_overhead_ms("pytest"), 50.0, places=3)
+
+    def test_killed_or_resumed_run_is_not_overhead(self):
+        # a retry adds 30 s of wall clock that no ledger row explains: counting
+        # it would charge 15 s/test of phantom "runner overhead"
+        self._run(wall_ms=700.0, test_ms=250.0)
+        self._run(wall_ms=30700.0, test_ms=250.0, attempts=2)
+        self.assertAlmostEqual(self.store.runner_overhead_ms("pytest"), 50.0, places=3)
+
+    def test_cold_store_has_no_overhead_guess(self):
+        self.assertEqual(self.store.runner_overhead_ms("pytest"), 0.0)

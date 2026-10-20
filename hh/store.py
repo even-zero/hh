@@ -16,7 +16,8 @@ import time
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS runs (
   id INTEGER PRIMARY KEY, runner TEXT, git_sha TEXT, suite_sig TEXT,
-  collection_ms REAL, total_ms REAL, wall_ms REAL, started_at REAL
+  collection_ms REAL, total_ms REAL, wall_ms REAL, started_at REAL,
+  attempts INTEGER
 );
 CREATE TABLE IF NOT EXISTS contexts (
   id INTEGER PRIMARY KEY, machine_fp TEXT, workers INTEGER, runner_ver TEXT, extras JSON
@@ -67,6 +68,9 @@ class Store:
         cols = {r[1] for r in self.db.execute("PRAGMA table_info(aggregates)")}
         if "mean" not in cols:
             self.db.execute("ALTER TABLE aggregates ADD COLUMN mean REAL")
+        rcols = {r[1] for r in self.db.execute("PRAGMA table_info(runs)")}
+        if "attempts" not in rcols:
+            self.db.execute("ALTER TABLE runs ADD COLUMN attempts INTEGER")
         self.db.commit()
 
     # -- runs / contexts -------------------------------------------------
@@ -79,10 +83,12 @@ class Store:
         return int(cur.lastrowid)
 
     def finish_run(self, run_id: int, total_ms: float, wall_ms: float,
-                   collection_ms: float | None = None) -> None:
+                   collection_ms: float | None = None,
+                   attempts: int = 1) -> None:
         self.db.execute(
-            "UPDATE runs SET total_ms=?, wall_ms=?, collection_ms=? WHERE id=?",
-            (total_ms, wall_ms, collection_ms, run_id),
+            "UPDATE runs SET total_ms=?, wall_ms=?, collection_ms=?, attempts=?"
+            " WHERE id=?",
+            (total_ms, wall_ms, collection_ms, int(attempts), run_id),
         )
         self.db.commit()
 
@@ -93,12 +99,19 @@ class Store:
         number of tests recorded by that run; median over the last `limit`.
         Returns 0.0 when the store has no completed run — a cold store gets no
         guess, it gets a record pass.
+
+        Only single-attempt runs count. A killed attempt or a resumed shard
+        contributes wall time that no ledger row explains (the budget it was
+        killed at), which reads as "runner overhead" and silently inflates
+        every later budget — measured on a 36 s probe suite as 111 ms/test of
+        phantom overhead.
         """
         rows = self.db.execute(
             "SELECT r.id, r.wall_ms, COALESCE(r.collection_ms, 0.0),"
             " COUNT(o.id), SUM(o.duration_ms)"
             " FROM runs r JOIN observations o ON o.run_id = r.id"
             " WHERE r.runner=? AND r.wall_ms > 0 AND r.collection_ms IS NOT NULL"
+            " AND (r.attempts IS NULL OR r.attempts = 1)"
             " GROUP BY r.id ORDER BY r.id DESC LIMIT ?", (runner, limit)).fetchall()
         vals = []
         for _id, wall, coll, n, total in rows:
@@ -181,6 +194,10 @@ class Store:
 
         Robust stats: p50/p90 empirical, EWMA mean (alpha=.3) for recency,
         MAD for spread. Censored rows count as lower bounds (kept as-is).
+
+        A rebuild over the touched keys was measured too: on a full-suite pass
+        every key is touched, so it costs the same queries plus a large IN(...)
+        list and is no faster (70 ms vs 41 ms at 9 k rows). Keep the one pass.
         """
         rows = self.db.execute(
             "SELECT test_key, file_path, duration_ms, censored, ts FROM observations"
