@@ -1,7 +1,0 @@
-<?xml version="1.0"?>
-<testsuite name="rspec" tests="2" failures="1" time="0.32">
-  <testcase name="is valid with attributes" classname="spec.models.user_spec" time="0.21"/>
-  <testcase name="requires email" classname="spec.models.user_spec" time="0.11">
-    <failure message="expected email to be present"/>
-  </testcase>
-</testsuite>

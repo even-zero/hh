@@ -13,7 +13,9 @@ existed to serve other metrics was removed.
 - capture-only adapters (Go, JUnit-XML, TRX, Jest reporter) and their fixtures;
 - the multi-scenario benchmark (probe/clean/workers/resume/hang/capture),
   `compare`, `dashboard`, `interleave`, `budget_probe` and the reports they
-  produced.
+  produced;
+- the `experiments/` tree and its 13 conformance fixtures, the JUnit listener,
+  the standalone Mocha reporter, and the unused `attempts` table and logger.
 
 **Changed**
 - `ExecutionPlan` is one shard with one budget: `p90 x 1.25` (3 s floor,
@@ -38,6 +40,10 @@ existed to serve other metrics was removed.
   as `unresolved` instead of failing the run.
 - The benchmark honours a repo `root` subdirectory (docutils) and per-repo
   environment (`PYTHONPATH`, pytest args) for both arms.
+- The adapter child process puts hh's package directory on `PYTHONPATH`, so the
+  tool works from a source checkout whatever the caller's cwd is.
+- CI is one page: tests on 3.10 and 3.13, CLI smoke, and a wheel installed into
+  a clean venv; the release workflow is a single tag-driven job.
 
 ## 1.0.0 — 2026-10-20
 

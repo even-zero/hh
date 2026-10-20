@@ -101,9 +101,14 @@ tests/           unit + end-to-end tests
 ## Development
 
 ```bash
+python3 -m pip install pytest        # the pytest adapter tests need it
 python3 -m unittest discover -s tests -q
 python3 -m benchmark setup && python3 -m benchmark run     # the benchmark
 ```
+
+CI (`.github/workflows/ci.yml`) runs the tests on Python 3.10 and 3.13, smokes
+the CLI on `fixtures/synth_tiny_7`, and installs the built wheel into a clean
+venv. The benchmark is not in CI: it clones ten repositories and takes minutes.
 
 ## License
 

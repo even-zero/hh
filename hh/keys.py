@@ -1,4 +1,4 @@
-"""Test identity normalization (ARCHITECTURE §7.1).
+"""Test identity normalization (README: "stable test identities").
 
 Composite key = runner :: norm-path/name :: param-hash.  Normalization must be
 stable across renames of line-noise (paths, line numbers) but strict enough that

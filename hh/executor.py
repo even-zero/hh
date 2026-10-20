@@ -151,7 +151,12 @@ def execute(plan: dict, root: str,
     ledger = os.path.join(plan["checkpoint_dir"], "ledger.jsonl")
     os.makedirs(plan["checkpoint_dir"], exist_ok=True)
     env = dict(os.environ)
-    env["PYTHONPATH"] = root + os.pathsep + env.get("PYTHONPATH", "")
+    # The adapter runs in a child process out of its own cwd, so hh has to be on
+    # the child's path even when it is not installed (a source checkout): the
+    # package directory is the parent of this file's directory.
+    pkg_parent = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    env["PYTHONPATH"] = os.pathsep.join(
+        [root, pkg_parent, env.get("PYTHONPATH", "")]).rstrip(os.pathsep)
     shard = plan["shards"][0]
     full = bool(shard.get("full_suite"))
     startup_s = float(plan.get("startup_s") or 0.0)
@@ -211,7 +216,6 @@ def execute(plan: dict, root: str,
             break
         stats["timed_out"] += 1
         if stats["attempts"] >= MAX_ATTEMPTS:
-            ls = (out or "").strip().splitlines()[-1:]
             stats["failed_tests"] = len(tests) if full else len(remaining)
             log("  budget exceeded again; stopping after %d attempts" % stats["attempts"])
             break

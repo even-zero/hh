@@ -83,6 +83,7 @@ def test_skip(): pass
         self.assertEqual(res["ingested"], 2)
         self.assertEqual(res["stats"]["attempts"], 1)
 
+    @unittest.skipUnless(__import__("importlib").util.find_spec("pytest"), "pytest not installed")
     def test_pytest_hard_kill_names_hanging_test(self):
         self.put("test_hang.py", "def test_never_finishes():\n    while True: pass\n")
         ledger = os.path.join(self.tmp, "ledger.jsonl")

@@ -49,7 +49,7 @@ class TestToolEndToEnd(unittest.TestCase):
         self.assertEqual(d["timed_out"], 0)
 
     def test_second_call_uses_a_measured_budget(self):
-        first = self.call()
+        self.call()                                     # the record pass
         warm = self.call()
         self.assertEqual(warm["operating_level"], "measured")
         self.assertEqual(warm["budget"]["basis"], "measured")

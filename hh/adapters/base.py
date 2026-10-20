@@ -1,4 +1,4 @@
-"""Ledger protocol shared by all capture adapters (Tier A/B)."""
+"""Ledger protocol shared by the adapters."""
 from __future__ import annotations
 
 import json

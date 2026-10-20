@@ -296,7 +296,6 @@ def main(argv=None):
 
     root = os.path.abspath(args.root)
     sys.path.insert(0, root)
-    loader = unittest.defaultTestLoader
     keys: dict[str, str] = {}
     if args.tests_file:
         import json

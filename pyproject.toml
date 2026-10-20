@@ -5,13 +5,13 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "hh"
 dynamic = ["version"]
-description = "Agent Timeout Estimator — duration-aware test budgets, checkpointed execution, and honest time-saved receipts for coding agents"
+description = "A measured test-suite timeout for coding agents: run once to record, then never be SIGKILLed by a guessed budget"
 readme = "README.md"
 requires-python = ">=3.10"
 license = "MIT"
 license-files = ["LICENSE"]
 authors = [{ name = "hh contributors" }]
-keywords = ["agents", "llm-agents", "testing", "timeout", "estimator", "ci", "test-runner", "checkpointing"]
+keywords = ["agents", "llm-agents", "testing", "timeout", "test-runner", "pytest", "unittest", "mocha"]
 classifiers = [
   "Development Status :: 5 - Production/Stable",
   "Intended Audience :: Developers",
@@ -39,4 +39,4 @@ include-package-data = true
 version = { attr = "hh.__version__" }
 
 [tool.setuptools.package-data]
-"hh.adapters" = ["*.mjs", "*.cjs", "*.java"]
+"hh.adapters" = ["*.cjs"]

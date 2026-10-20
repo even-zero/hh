@@ -8,7 +8,6 @@ timeout does not have to be guessed.
 from __future__ import annotations
 
 import json
-import math
 import os
 import platform
 import sqlite3
@@ -37,10 +36,6 @@ CREATE TABLE IF NOT EXISTS aggregates (
   n INTEGER, n_censored INTEGER, p50 REAL, p90 REAL, mean_ewma REAL, mad REAL,
   mean REAL,
   updated_at REAL, PRIMARY KEY (level, level_key)
-);
-CREATE TABLE IF NOT EXISTS attempts (
-  id INTEGER PRIMARY KEY, ts REAL, policy TEXT, suite_id TEXT, attempt INTEGER,
-  budget_s REAL, outcome TEXT, wall_ms REAL, wasted_ms REAL, overhead_ms REAL, note TEXT
 );
 """
 
@@ -231,24 +226,3 @@ class Store:
                 " GROUP BY test_key HAVING c >= ?", (min_count,)
             )
         ]
-
-    def suite_total_history(self, suite_sig: str) -> list[float]:
-        return [
-            r[0]
-            for r in self.db.execute(
-                "SELECT total_ms FROM runs WHERE suite_sig=? AND total_ms IS NOT NULL"
-                " ORDER BY started_at DESC LIMIT 20", (suite_sig,)
-            )
-        ]
-
-    # -- attempts (experiment accounting) --------------------------------
-    def log_attempt(self, **kw) -> None:
-        self.db.execute(
-            "INSERT INTO attempts(ts, policy, suite_id, attempt, budget_s, outcome,"
-            " wall_ms, wasted_ms, overhead_ms, note) VALUES (?,?,?,?,?,?,?,?,?,?)",
-            (kw.get("ts", time.time()), kw.get("policy"), kw.get("suite_id"),
-             kw.get("attempt"), kw.get("budget_s"), kw.get("outcome"),
-             kw.get("wall_ms"), kw.get("wasted_ms"), kw.get("overhead_ms"),
-             kw.get("note")),
-        )
-        self.db.commit()

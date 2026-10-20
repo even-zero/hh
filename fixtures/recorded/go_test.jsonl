@@ -1,8 +1,0 @@
-{"Action":"run","Package":"example.com/calc","Test":"TestAdd"}
-{"Action":"run","Package":"example.com/calc","Test":"TestAdd/positives"}
-{"Action":"pass","Package":"example.com/calc","Test":"TestAdd/positives","Elapsed":0.001}
-{"Action":"pass","Package":"example.com/calc","Test":"TestAdd","Elapsed":0.002}
-{"Action":"run","Package":"example.com/calc","Test":"TestDivZero"}
-{"Action":"fail","Package":"example.com/calc","Test":"TestDivZero","Elapsed":0.003}
-{"Action":"skip","Package":"example.com/calc","Test":"TestSlow","Elapsed":0.0}
-{"Action":"pass","Package":"example.com/calc","Elapsed":0.011}
