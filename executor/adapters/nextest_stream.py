@@ -244,8 +244,12 @@ def _stream_run(tool: str, root: str, targets: list[tuple[str, str]],
     if filtered:
         args += ["-E", _filter_expression(targets)]
     wanted = {raw_for(*t) for t in targets}
+    # The libtest-json stream is still an experimental format in nextest: it
+    # says so and exits 95 unless the variable is set.
+    env = dict(os.environ, NEXTEST_EXPERIMENTAL_LIBTEST_JSON="1")
     proc = subprocess.Popen(args, cwd=root, stdout=subprocess.PIPE,
-                            stderr=subprocess.STDOUT, text=True, bufsize=1)
+                            stderr=subprocess.STDOUT, text=True, bufsize=1,
+                            env=env)
     tail: list[str] = []
     written = 0
     started: set[str] = set()

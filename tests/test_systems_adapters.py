@@ -304,7 +304,7 @@ class TestNextestParsers(unittest.TestCase):
 
 class TestNextestWithFakeTool(unittest.TestCase):
     FAKE = '''
-import json, sys
+import json, os, sys
 args = sys.argv[1:]
 if "list" in args:
     print(json.dumps({"test-count": 3, "rust-suites": {
@@ -314,6 +314,9 @@ if "list" in args:
                                "tests::test_ignored": {"ignored": True},
                                "tests::test_fail": {"ignored": False}}}}}))
     sys.exit(0)
+# a real nextest refuses libtest-json without this opt-in (exit 95)
+if os.environ.get("NEXTEST_EXPERIMENTAL_LIBTEST_JSON") != "1":
+    sys.exit(95)
 if "-E" in args:
     open(%(argv)r, "w").write(" ".join(args))
 for ev in (
