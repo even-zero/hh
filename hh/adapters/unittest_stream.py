@@ -300,8 +300,8 @@ def main(argv=None):
         keys = unique_key_map(ids, RUNNER)
         suite = unittest.TestSuite(resolve_many(root, ids))
 
-    from ..executor import _done_keys  # reuse ledger reader
-    done = _done_keys(args.ledger)
+    from ..executor import done_map  # reuse ledger reader
+    done = done_map(args.ledger)
     key_of = lambda t: keys.get(t.id(), normalize(RUNNER, t.id()))
     tests = [t for t in _flatten(suite) if key_of(t) not in done]
 

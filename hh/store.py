@@ -1,8 +1,9 @@
-"""Duration store: repo-local SQLite (ARCHITECTURE §6).
+"""Duration store: repo-local SQLite.
 
-Raw observations are append-only and gitignored; aggregates are materialized and
-committable. Aggregates can always be rebuilt from raw rows when the estimator
-is re-tuned.
+Raw observations are append-only and gitignored; aggregates are materialized.
+Aggregates can always be rebuilt from raw rows when the estimator is re-tuned.
+The store has one job: remember how long each test took, so the next run's
+timeout does not have to be guessed.
 """
 from __future__ import annotations
 
@@ -36,10 +37,6 @@ CREATE TABLE IF NOT EXISTS aggregates (
   n INTEGER, n_censored INTEGER, p50 REAL, p90 REAL, mean_ewma REAL, mad REAL,
   mean REAL,
   updated_at REAL, PRIMARY KEY (level, level_key)
-);
-CREATE TABLE IF NOT EXISTS savings (
-  id INTEGER PRIMARY KEY, ts REAL, job_id TEXT, suite_id TEXT, kind TEXT,
-  amount_ms REAL, basis TEXT
 );
 CREATE TABLE IF NOT EXISTS attempts (
   id INTEGER PRIMARY KEY, ts REAL, policy TEXT, suite_id TEXT, attempt INTEGER,
@@ -92,37 +89,11 @@ class Store:
         )
         self.db.commit()
 
-    def runner_overhead_ms(self, runner: str, limit: int = 5) -> float:
-        """Measured per-test runner bookkeeping (framework plumbing).
-
-        For each recent completed run: (wall − collection − Σ test durations) /
-        number of tests recorded by that run; median over the last `limit`.
-        Returns 0.0 when the store has no completed run — a cold store gets no
-        guess, it gets a record pass.
-
-        Only single-attempt runs count. A killed attempt or a resumed shard
-        contributes wall time that no ledger row explains (the budget it was
-        killed at), which reads as "runner overhead" and silently inflates
-        every later budget — measured on a 36 s probe suite as 111 ms/test of
-        phantom overhead.
-        """
-        rows = self.db.execute(
-            "SELECT r.id, r.wall_ms, COALESCE(r.collection_ms, 0.0),"
-            " COUNT(o.id), SUM(o.duration_ms)"
-            " FROM runs r JOIN observations o ON o.run_id = r.id"
-            " WHERE r.runner=? AND r.wall_ms > 0 AND r.collection_ms IS NOT NULL"
-            " AND (r.attempts IS NULL OR r.attempts = 1)"
-            " GROUP BY r.id ORDER BY r.id DESC LIMIT ?", (runner, limit)).fetchall()
-        vals = []
-        for _id, wall, coll, n, total in rows:
-            if not n:
-                continue
-            over = ((wall or 0.0) - (coll or 0.0) - (total or 0.0)) / n
-            vals.append(max(0.0, over))
-        if not vals:
-            return 0.0
-        vals.sort()
-        return round(vals[len(vals) // 2], 3)
+    def durations(self, test_key: str, limit: int = 12) -> list[float]:
+        """This test's recent measured durations (ms), oldest first."""
+        return [r[0] for r in self.db.execute(
+            "SELECT duration_ms FROM observations WHERE test_key=?"
+            " ORDER BY ts DESC LIMIT ?", (test_key, limit)).fetchall()][::-1]
 
     def ctx_id(self, workers: int = 1, runner_ver: str | None = None) -> int:
         fp = machine_fp()

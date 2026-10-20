@@ -71,6 +71,23 @@ async function main() {
     };
     filter(mocha.suite);
   }
+  // Resume support: never re-pay a test this ledger already finished.
+  if (fs.existsSync(ledger)) {
+    const done = new Set();
+    for (const line of fs.readFileSync(ledger, 'utf8').split('\n')) {
+      if (!line.trim()) continue;
+      try { const row = JSON.parse(line); if (row.type === 'end') done.add(row.key); }
+      catch (e) { /* partial last row from a kill */ }
+    }
+    if (done.size) {
+      const drop = suite => {
+        suite.tests = suite.tests.filter(t => !done.has(key(t)));
+        for (const child of suite.suites) drop(child);
+        suite.suites = suite.suites.filter(s => s.tests.length || s.suites.length);
+      };
+      drop(mocha.suite);
+    }
+  }
   const fd = fs.openSync(ledger, 'a');
   const write = row => fs.writeSync(fd, JSON.stringify(row) + '\n');
   const runner = mocha.run(failures => { fs.closeSync(fd); process.exitCode = failures ? 1 : 0; });

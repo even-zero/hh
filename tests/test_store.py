@@ -61,11 +61,27 @@ class TestIngest(unittest.TestCase):
 
 
 class TestSchema(unittest.TestCase):
-    def test_savings_table_exists(self):
+    def test_schema_is_the_three_tables_it_needs(self):
         tmp = tempfile.mkdtemp(prefix="h8-schema-")
         try:
             st = Store(tmp)
-            st.db.execute("SELECT kind, amount_ms FROM savings").fetchall()
+            tables = {r[0] for r in st.db.execute(
+                "SELECT name FROM sqlite_master WHERE type='table'")}
+            self.assertTrue({"runs", "observations", "aggregates"} <= tables)
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+
+    def test_durations_are_read_back_in_time_order(self):
+        tmp = tempfile.mkdtemp(prefix="h8-dur-")
+        try:
+            st = Store(tmp)
+            rid = st.start_run("pytest")
+            ctx = st.ctx_id()
+            for i, ms in enumerate((10.0, 20.0, 30.0)):
+                st.add_observation(rid, ctx, runner="pytest", test_key="pytest::t/a",
+                                   raw_id="t/a", status="passed", duration_ms=ms,
+                                   file_path="t", name="a", ts=1000.0 + i)
+            self.assertEqual(st.durations("pytest::t/a"), [10.0, 20.0, 30.0])
         finally:
             shutil.rmtree(tmp, ignore_errors=True)
 
@@ -74,40 +90,3 @@ if __name__ == "__main__":
     unittest.main()
 
 
-class TestRunnerOverhead(unittest.TestCase):
-    """Per-test runner overhead must come from clean single-attempt runs only."""
-
-    def setUp(self):
-        self.tmp = tempfile.mkdtemp(prefix="h8-overhead-")
-        self.store = Store(self.tmp)
-
-    def tearDown(self):
-        shutil.rmtree(self.tmp, ignore_errors=True)
-
-    def _run(self, *, wall_ms: float, test_ms: float, n: int = 2,
-             collection_ms: float = 100.0, attempts: int = 1) -> None:
-        rid = self.store.start_run("pytest", suite_sig=None)
-        ctx = self.store.ctx_id(workers=1)
-        for i in range(n):
-            self.store.add_observation(rid, ctx, runner="pytest",
-                                       test_key=f"pytest::t/t{i}", raw_id=f"t{i}",
-                                       status="passed", duration_ms=test_ms,
-                                       file_path="t", name=f"t{i}")
-        self.store.commit()
-        self.store.finish_run(rid, total_ms=test_ms * n, wall_ms=wall_ms,
-                              collection_ms=collection_ms, attempts=attempts)
-
-    def test_single_attempt_run_gives_the_rate(self):
-        # 2 tests x 250 ms + 100 ms startup + 100 ms of plumbing over 2 tests
-        self._run(wall_ms=700.0, test_ms=250.0)
-        self.assertAlmostEqual(self.store.runner_overhead_ms("pytest"), 50.0, places=3)
-
-    def test_killed_or_resumed_run_is_not_overhead(self):
-        # a retry adds 30 s of wall clock that no ledger row explains: counting
-        # it would charge 15 s/test of phantom "runner overhead"
-        self._run(wall_ms=700.0, test_ms=250.0)
-        self._run(wall_ms=30700.0, test_ms=250.0, attempts=2)
-        self.assertAlmostEqual(self.store.runner_overhead_ms("pytest"), 50.0, places=3)
-
-    def test_cold_store_has_no_overhead_guess(self):
-        self.assertEqual(self.store.runner_overhead_ms("pytest"), 0.0)
