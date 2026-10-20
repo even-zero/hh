@@ -26,17 +26,17 @@ classifiers = [
 ]
 
 [project.scripts]
-hh = "hh.__main__:main"
+hh = "executor.__main__:main"
 
 [project.urls]
 # Repository = "https://github.com/<your-org>/hh"   # uncomment after you push
 
 [tool.setuptools]
-packages = ["hh", "hh.adapters"]
+packages = ["executor", "executor.adapters"]
 include-package-data = true
 
 [tool.setuptools.dynamic]
-version = { attr = "hh.__version__" }
+version = { attr = "executor.__version__" }
 
 [tool.setuptools.package-data]
-"hh.adapters" = ["*.cjs", "*.java"]
+"executor.adapters" = ["*.cjs", "*.java"]

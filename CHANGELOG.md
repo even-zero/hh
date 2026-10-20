@@ -1,11 +1,27 @@
 # Changelog
 
+## 2.2.0 — 2026-10-20
+
+**Changed**
+- The Python package is now `executor/` (it was `hh/`). The **command is still
+  `hh`** and the distribution is still `hh`, so nothing changes for a user of
+  the CLI or of the `run_tests` tool; only `import hh` becomes `import executor`
+  and `python -m hh` becomes `python -m executor`.
+- `executor/executor.py` became `executor/runner.py`, so the module is not
+  `executor.executor`.
+- Runner documentation moved out of `README.md` into `docs/`: one page per
+  runner, plus `docs/README.md` with the support matrix, the resume
+  granularity of each adapter, the runners that are deliberately not supported
+  and why, and the contract for adding one. The README keeps a table and links.
+- The on-disk store is unchanged at `.hh/`, so stores recorded before the
+  rename keep working with no migration.
+
 ## 2.1.0 — 2026-10-20
 
 **Added**
 - `junit` runner: Java and Kotlin suites on the JUnit Platform (JUnit 5, JUnit 4
   via Vintage) now get a record pass, a measured budget and resume-on-overrun
-  like every other runner. A small driver (`hh/adapters/HhJunit.java`) is
+  like every other runner. A small driver (`executor/adapters/HhJunit.java`) is
   compiled once with `javac`; the project's test classpath is taken from
   `HH_JUNIT_CLASSPATH`, Maven, or a console-standalone jar.
 

@@ -6,7 +6,7 @@
  * not give us: a per-test ledger written *during* the run (so a SIGKILL keeps
  * the finished rows) and the ability to run an explicit set of test ids.
  *
- * This class is compiled once by hh/adapters/junit_stream.py and then run:
+ * This class is compiled once by executor/adapters/junit_stream.py and then run:
  *
  *   java -cp <driver>:<project test classpath> HhJunit discover \
  *        --scan target/test-classes --out ids.jsonl
@@ -17,8 +17,8 @@
  * (Jupiter), JUnit 4 through the Vintage engine, and Kotlin test suites
  * compiled against either of them.
  *
- * Ledger rows and the identity scheme mirror hh/adapters/base.py and
- * hh/keys.py exactly; tests/test_junit_adapter.py pins that they agree.
+ * Ledger rows and the identity scheme mirror executor/adapters/base.py and
+ * executor/keys.py exactly; tests/test_junit_adapter.py pins that they agree.
  */
 
 import java.io.BufferedWriter;

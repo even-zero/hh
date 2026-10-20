@@ -95,7 +95,7 @@ def main(argv=None):
         opts.append("--collect-only")
     else:
         os.environ["HH_LEDGER"] = args.ledger
-        opts += ["-p", "hh.adapters.pytest_plugin"]
+        opts += ["-p", "executor.adapters.pytest_plugin"]
     selected = None
     if args.tests_file:
         with open(args.tests_file, encoding="utf-8") as f:
@@ -127,7 +127,7 @@ def main(argv=None):
             env["PYTHONPATH"] = os.path.dirname(os.path.dirname(os.path.dirname(
                 os.path.abspath(__file__)))) + os.pathsep + env.get("PYTHONPATH", "")
             return int(subprocess.run(
-                [sys.executable, "-m", "hh.adapters.pytest_stream", "--root",
+                [sys.executable, "-m", "executor.adapters.pytest_stream", "--root",
                  args.root, "--ledger", args.ledger, "--tests-file",
                  args.tests_file, "--deselect-only"], env=env).returncode)
     # A cold record pass (no test list) discovers identities during its own

@@ -1,7 +1,7 @@
 """Tier A adapter: stdlib unittest with live ledger checkpoints.
 
 Usage:
-  python3 -m hh.adapters.unittest_stream --root DIR --ledger LEDGER \
+  python3 -m executor.adapters.unittest_stream --root DIR --ledger LEDGER \
       [--tests id1 id2 ...]        # run selected tests (skip ledgered ones)
                                   # default: discover test_*.py under root
 """
@@ -313,7 +313,7 @@ def main(argv=None):
         keys = unique_key_map(ids, RUNNER)
         suite = unittest.TestSuite(resolve_many(root, ids))
 
-    from ..executor import done_map  # reuse ledger reader
+    from ..runner import done_map  # reuse ledger reader
     done = done_map(args.ledger)
     key_of = lambda t: keys.get(t.id(), normalize(RUNNER, t.id()))
     tests = [t for t in _flatten(suite) if key_of(t) not in done]

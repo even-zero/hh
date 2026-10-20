@@ -6,7 +6,7 @@ import tempfile
 import time
 import unittest
 
-from hh.store import Store
+from executor.store import Store
 
 
 def end_row(key: str, ms: float, status: str = "passed") -> str:

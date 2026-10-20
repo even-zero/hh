@@ -103,7 +103,7 @@ def collect_manifest(root: str, runner: str, meter: Meter,
         except (OSError, ValueError, KeyError):
             pass
 
-    # The adapter runs in a child process; make sure it can import hh when the
+    # The adapter runs in a child process; make sure it can import executor when
     # tool itself is being used from a source checkout rather than a wheel.
     child_env = dict(os.environ)
     pkg_parent = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -116,7 +116,7 @@ def collect_manifest(root: str, runner: str, meter: Meter,
             with tempfile.TemporaryDirectory(prefix="hh-collect-") as tmp:
                 out = os.path.join(tmp, "nodeids.jsonl")
                 proc = subprocess.run(
-                    [sys.executable, "-m", "hh.adapters.pytest_stream",
+                    [sys.executable, "-m", "executor.adapters.pytest_stream",
                      "--root", root_abs, "--collect-out", out],
                     capture_output=True, text=True, env=child_env)
                 if proc.returncode not in (0, 5) or not os.path.exists(out):
@@ -128,7 +128,7 @@ def collect_manifest(root: str, runner: str, meter: Meter,
             with tempfile.TemporaryDirectory(prefix="hh-collect-") as tmp:
                 out = os.path.join(tmp, "junit-ids.jsonl")
                 proc = subprocess.run(
-                    [sys.executable, "-m", "hh.adapters.junit_stream",
+                    [sys.executable, "-m", "executor.adapters.junit_stream",
                      "--root", root_abs, "--collect-out", out],
                     capture_output=True, text=True, env=child_env)
                 if proc.returncode != 0 or not os.path.exists(out):
@@ -247,12 +247,12 @@ def build_plan(root: str, runner: str = "unittest", store_root: str = ".",
 def execute_plan(plan: dict, root: str, runner: str = "unittest",
                  store_root: str = ".", log=lambda *a: None) -> dict:
     """execute + record step."""
-    from .executor import execute, done_map
+    from .runner import execute, done_map
     st = store_mod.Store(store_root)
-    adapter = {"unittest": "hh.adapters.unittest_stream",
-               "pytest": "hh.adapters.pytest_stream",
-               "node": "hh.adapters.mocha_stream",
-               "junit": "hh.adapters.junit_stream"}[runner]
+    adapter = {"unittest": "executor.adapters.unittest_stream",
+               "pytest": "executor.adapters.pytest_stream",
+               "node": "executor.adapters.mocha_stream",
+               "junit": "executor.adapters.junit_stream"}[runner]
     ledger = os.path.join(plan["checkpoint_dir"], "ledger.jsonl")
     before = done_map(ledger)
     stats = execute(plan, os.path.abspath(root), adapter=adapter, log=log)

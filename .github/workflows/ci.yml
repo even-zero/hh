@@ -54,14 +54,14 @@ jobs:
 
       - name: CLI smoke (plan -> run -> report on the fixture)
         run: |
-          python -m hh --version
-          python -m hh tool-spec > /tmp/tool.json
+          python -m executor --version
+          python -m executor tool-spec > /tmp/tool.json
           python -c "import json; assert json.load(open('/tmp/tool.json'))['name'] == 'run_tests'"
-          python -m hh --store-root /tmp/hh-store plan \
+          python -m executor --store-root /tmp/hh-store plan \
             --root fixtures/synth_tiny_7 --out /tmp/plan.json > /dev/null
-          python -m hh --store-root /tmp/hh-store run \
+          python -m executor --store-root /tmp/hh-store run \
             --plan /tmp/plan.json --root fixtures/synth_tiny_7 > /dev/null
-          python -m hh --store-root /tmp/hh-store report > /tmp/report.json
+          python -m executor --store-root /tmp/hh-store report > /tmp/report.json
           python -c "import json; d = json.load(open('/tmp/report.json')); assert d['tests_tracked'] > 0, d"
 
   junit:
@@ -129,7 +129,7 @@ jobs:
           set -euo pipefail
           python -m venv /tmp/venv
           /tmp/venv/bin/pip install --quiet --disable-pip-version-check dist/*.whl
-          /tmp/venv/bin/python -c "import hh, hh.tool, hh.adapters.unittest_stream; print(hh.__version__)"
+          /tmp/venv/bin/python -c "import executor, executor.tool, executor.adapters.unittest_stream; print(executor.__version__)"
           /tmp/venv/bin/hh tool-spec | python -c "import json,sys; assert json.load(sys.stdin)['name'] == 'run_tests'"
           /tmp/venv/bin/hh --store-root /tmp/hh-wheel-store plan \
             --root "$GITHUB_WORKSPACE/fixtures/synth_tiny_7" --out /tmp/wheel-plan.json > /dev/null

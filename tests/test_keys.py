@@ -2,7 +2,7 @@
 strict enough that fuzzy tiers — not the key — handle true renames."""
 import unittest
 
-from hh import keys
+from executor import keys
 
 
 class TestNormalize(unittest.TestCase):

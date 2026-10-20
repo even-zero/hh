@@ -102,7 +102,7 @@ def _selection_file(checkpoint: str, tests: list[dict]) -> str:
 
 
 def _cmd(adapter: str, root: str, ledger: str, tests_file: str | None) -> list[str]:
-    if adapter == "hh.adapters.mocha_stream":
+    if adapter == "executor.adapters.mocha_stream":
         script = os.path.join(os.path.dirname(__file__), "adapters", "mocha_stream.cjs")
         cmd = ["node", script, "run", root, ledger]
         return cmd + ([tests_file] if tests_file else [])
@@ -145,7 +145,7 @@ def _mark_victim(ledger: str, remaining: list[dict], kill_ts: float) -> float | 
 # -- the executor ---------------------------------------------------------
 
 def execute(plan: dict, root: str,
-            adapter: str = "hh.adapters.unittest_stream",
+            adapter: str = "executor.adapters.unittest_stream",
             log=lambda *a: None) -> dict:
     """Run the plan's single shard under its budget; resume on overrun."""
     ledger = os.path.join(plan["checkpoint_dir"], "ledger.jsonl")

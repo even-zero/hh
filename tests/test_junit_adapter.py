@@ -14,9 +14,9 @@ import tempfile
 import unittest
 from unittest import mock
 
-from hh.adapters import junit_stream
-from hh.keys import normalize, unique_key_map
-from hh.tool import build_plan, execute_plan, run_tests
+from executor.adapters import junit_stream
+from executor.keys import normalize
+from executor.tool import build_plan, execute_plan, run_tests
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 HAVE_JDK = bool(shutil.which("javac") and shutil.which("java"))
@@ -73,7 +73,7 @@ class Classpath(unittest.TestCase):
 
 FAKE_JAVA = r'''#!{python}
 import json, os, sys
-from hh.keys import unique_key_map
+from executor.keys import unique_key_map
 
 spec = json.load(open(os.environ["HH_FAKE_JUNIT_SPEC"]))
 argv = sys.argv[1:]

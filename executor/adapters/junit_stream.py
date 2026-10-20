@@ -198,7 +198,7 @@ def discover(root: str, out_path: str) -> int:
                           capture_output=True, text=True)
     if proc.returncode != 0 or not os.path.exists(out_path):
         raise RuntimeError("JUnit discovery failed:\n" + (proc.stdout + proc.stderr)[-2000:])
-    # The driver and hh/keys.py must agree on every id, or the next run would
+    # The driver and executor/keys.py must agree on every id, or the next run would
     # look for tests the ledger never writes. Fail here, where it is readable.
     from ..keys import unique_key_map
     with open(out_path, encoding="utf-8") as f:
@@ -207,7 +207,7 @@ def discover(root: str, out_path: str) -> int:
     wrong = [r for r in rows if r.get("key") != expected.get(r["raw_id"])]
     if wrong:
         raise RuntimeError(
-            "HhJunit.java and hh/keys.py disagree on test identity "
+            "HhJunit.java and executor/keys.py disagree on test identity "
             f"({len(wrong)} ids, e.g. {wrong[0]['raw_id']!r}: driver "
             f"{wrong[0].get('key')!r} vs {expected.get(wrong[0]['raw_id'])!r})")
     return 0
@@ -223,7 +223,7 @@ def run(root: str, ledger: str, tests_file: str | None) -> int:
 
 
 def main(argv=None) -> int:
-    ap = argparse.ArgumentParser(prog="hh.adapters.junit_stream")
+    ap = argparse.ArgumentParser(prog="executor.adapters.junit_stream")
     ap.add_argument("--root", required=True)
     ap.add_argument("--ledger")
     ap.add_argument("--tests-file")
