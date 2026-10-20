@@ -55,6 +55,11 @@ package is `executor`.
 | `node-test` | JavaScript | Node's built-in `node:test` | [docs/node-test.md](docs/node-test.md) |
 | `tap` | JavaScript | node-tap | [docs/tap.md](docs/tap.md) |
 | `junit` | Java, Kotlin | JUnit 5, JUnit 4 via Vintage, Kotlin suites | [docs/junit.md](docs/junit.md) |
+| `go` | Go | `go test` | [docs/go.md](docs/go.md) |
+| `nextest` | Rust | cargo-nextest | [docs/nextest.md](docs/nextest.md) |
+| `rspec` | Ruby | RSpec | [docs/rspec.md](docs/rspec.md) |
+| `phpunit` | PHP | PHPUnit | [docs/phpunit.md](docs/phpunit.md) |
+| `ctest` | C, C++ | CTest, GoogleTest, Catch2 | [docs/ctest.md](docs/ctest.md) |
 
 `docs/README.md` has the full matrix — what each runner can discover, how
 finely a run can be resumed, the runners that are deliberately not supported

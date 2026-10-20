@@ -1,7 +1,7 @@
 include README.md LICENSE CHANGELOG.md
 include ARCHITECTURE.md
 recursive-include docs *.md
-recursive-include executor/adapters *.cjs *.java
+recursive-include executor/adapters *.cjs *.java *.rb
 recursive-include tests *.py
 recursive-include fixtures *.py *.json
 global-exclude __pycache__ *.py[cod]

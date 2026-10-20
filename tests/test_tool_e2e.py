@@ -65,6 +65,16 @@ class TestToolEndToEnd(unittest.TestCase):
 
     def test_budget_covers_the_suite_over_repeats(self):
         """The point of the metric: the measured budget keeps not killing it."""
+
+    def test_a_plan_records_its_runner_and_is_executed_by_it(self):
+        from executor.tool import build_plan, execute_plan
+
+        plan = build_plan(FIXTURE, runner="unittest", store_root=self.store)
+        self.assertEqual(plan["runner"], "unittest")
+        # executing without naming a runner uses the plan's, not a default
+        res = execute_plan(plan, FIXTURE, store_root=self.store)
+        self.assertEqual(res["stats"]["error"], None)
+        self.assertGreater(res["ingested"], 0)
         self.call()
         for _ in range(3):
             d = self.call()
@@ -119,7 +129,8 @@ class TestToolEndToEnd(unittest.TestCase):
         enum = props["runner"]["enum"]
         self.assertEqual(set(enum),
                          {"unittest", "pytest", "node", "junit",
-                          "jest", "vitest", "node-test", "tap"})
+                          "jest", "vitest", "node-test", "tap",
+                          "go", "nextest", "rspec", "phpunit", "ctest"})
         # The spec must be generated from the registry, not a second list.
         self.assertEqual(enum, list(registry.RUNNERS))
 

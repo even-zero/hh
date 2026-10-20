@@ -24,15 +24,14 @@ reason, rather than pretended.
 | `node-test` | JavaScript | Node's built-in `node:test` | [node-test.md](node-test.md) |
 | `tap` | JavaScript | node-tap | [tap.md](tap.md) |
 | `junit` | Java, Kotlin | anything on the JUnit Platform: JUnit 5 (Jupiter), JUnit 4 via Vintage, Kotlin suites | [junit.md](junit.md) |
+| `go` | Go | `go test` (tests, examples, fuzz seeds) | [go.md](go.md) |
+| `nextest` | Rust | cargo-nextest | [nextest.md](nextest.md) |
+| `rspec` | Ruby | RSpec | [rspec.md](rspec.md) |
+| `phpunit` | PHP | PHPUnit 9.4+ | [phpunit.md](phpunit.md) |
+| `ctest` | C, C++ | CTest: plain `add_test`, GoogleTest, Catch2 | [ctest.md](ctest.md) |
 
 The five JavaScript adapters share one execution model (file granularity for
 four of them, chunked runs, `HH_JS_CHUNK`): [javascript.md](javascript.md).
-
-Still to come, in the next batch:
-
-| batch | runners |
-|---|---|
-| systems | `go`, `nextest` (Rust), `dotnet`, `rspec` (Ruby), `phpunit`, `ctest` (C/C++ / GoogleTest) |
 
 ## What each runner gives you
 
@@ -46,6 +45,11 @@ Still to come, in the next batch:
 | `node-test` | Node's default file shapes (`*.test.*`, `test-*`, `test/`) | **file** | `node --test` has no listing command; needs Node ≥ 20 |
 | `tap` | tap's default file shapes | **file** | parses top-level TAP points, `# time=` per file |
 | `junit` | JUnit Platform launcher over the compiled test classes | **test** | needs a JDK and the test classpath |
+| `go` | `go test -list '.*' ./...` | **test** | `-count=1`, so cached results never look instant |
+| `nextest` | `cargo nextest list --message-format json` | **test** | ignored tests are not in the manifest |
+| `rspec` | `rspec --dry-run --format json` | **test** | a formatter streams rows; RSpec's JSON report is end-of-run only |
+| `phpunit` | `phpunit --list-tests-xml` (>= 9.4) | **test** | TeamCity messages; data-provider sets are summed per method |
+| `ctest` | `ctest --show-only=json-v1` | **test** | `DISABLED` tests are left out; `--root` may be the source or build tree |
 
 "Resume granularity" is the finest unit hh can leave out of a retry. `test`
 means a re-run pays only for tests that had not finished; `file` means a resume
@@ -59,6 +63,8 @@ re-runs every file that never got a verdict, even if some tests inside it did.
 | Swift XCTest, Elixir ExUnit | no per-test machine-readable stream without a project-side dependency hh would have to install |
 | Bazel | every test is a sandboxed action scheduled by Bazel; there is no single process for hh to time, and no resume model |
 | JUnit-platform frameworks behind Maven Surefire only | Surefire forks its own JVM and reports by file, so hh cannot stream per-test rows; the `junit` runner bypasses it by driving the Platform directly |
+| .NET (`dotnet test`, xUnit/NUnit/MSTest) | the only per-test machine-readable output is a TRX file, written when the run ends — a suite killed at the budget would report nothing, and TRX was deliberately removed from this tool. The console logger streams but reports display names, not the fully-qualified ids a resume needs. Adding it means re-adding TRX on purpose; not done silently. |
+| Jest/Vitest/… test names instead of files | see [javascript.md](javascript.md): none of them can replay a list of ids |
 
 ## Adding a runner
 
@@ -95,3 +101,9 @@ JS adapters return the same rows through `common.main(runner, {collect,
 runChunk})`; they own their discovery and their per-chunk report parsing, and
 `common` owns chunking, the ledger, `suite_end` and the "no verdict means
 failed" rule.
+
+The systems adapters (`go`, `nextest`, `rspec`, `phpunit`, `ctest`) are module
+adapters that drive an external tool. They share `executor/adapters/driver.py`
+for the CLI and error reporting, and each one owns the translation from its
+tool's output to ledger rows. They all read their own ledger back and skip ids
+that already have a verdict, because a record pass can be killed too.

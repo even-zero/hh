@@ -40,4 +40,4 @@ include-package-data = true
 version = { attr = "executor.__version__" }
 
 [tool.setuptools.package-data]
-"executor.adapters" = ["*.cjs", "*.java", "js/*.cjs"]
+"executor.adapters" = ["*.cjs", "*.java", "*.rb", "js/*.cjs"]

@@ -51,3 +51,58 @@ def end_row(ledger: str, key: str, raw_id: str, status: str, duration_ms: float,
         "type": "end", "key": key, "raw_id": raw_id, "status": status,
         "duration_ms": round(duration_ms, 3), "censored": censored, "ts": time.time(),
     })
+
+
+# -- helpers for adapters that drive an external runner --------------------
+
+def done_ids(ledger: str) -> set[str]:
+    """Raw ids that already have a verdict in this ledger.
+
+    A record pass can be killed too. The retry re-enters with the same ledger,
+    so it must not run (or record) a unit that already finished: the store
+    would count it twice and the resume would re-pay for it.
+    """
+    done: set[str] = set()
+    try:
+        with open(ledger, encoding="utf-8", errors="replace") as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    row = json.loads(line)
+                except ValueError:
+                    continue                      # partial last line from a kill
+                if row.get("type") == "end" and row.get("raw_id"):
+                    done.add(row["raw_id"])
+    except OSError:
+        pass
+    return done
+
+
+def selection_ids(tests_file: str | None) -> list[str] | None:
+    """Raw ids from hh's selection file, or None meaning 'the whole suite'."""
+    if not tests_file:
+        return None
+    ids: list[str] = []
+    with open(tests_file, encoding="utf-8") as f:
+        for line in f:
+            if not line.strip():
+                continue
+            try:
+                row = json.loads(line)
+            except ValueError:
+                continue
+            if row.get("raw_id"):
+                ids.append(row["raw_id"])
+    return ids
+
+
+def write_ids(path: str, rows) -> int:
+    """Write `{"raw_id", "key"}` rows for discovery; returns how many."""
+    n = 0
+    with open(path, "w", encoding="utf-8") as f:
+        for raw_id, key in rows:
+            f.write(json.dumps({"raw_id": raw_id, "key": key}) + "\n")
+            n += 1
+    return n

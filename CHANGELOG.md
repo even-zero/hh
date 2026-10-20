@@ -1,5 +1,41 @@
 # Changelog
 
+## 2.4.0 — 2026-10-20
+
+**Added**
+- Five systems runners: `go` (`go test -json`), `nextest` (Rust,
+  `cargo nextest run --message-format json`), `rspec` (Ruby, a formatter that
+  streams rows), `phpunit` (PHP, TeamCity messages with ids from the
+  `locationHint`), and `ctest` (C/C++, including GoogleTest and Catch2 suites
+  registered with `add_test`). Each has a page under `docs/`, and
+  `docs/README.md` lists what it can discover and how finely it resumes.
+- `executor/adapters/driver.py`: the CLI skeleton the systems adapters share
+  (`--root/--collect-out` and `--root/--ledger [--tests-file]`), so adding one
+  is a discovery function, a run function, and a line in the registry.
+- `tests/test_systems_adapters.py`: parsers against the output shapes each tool
+  documents, the whole adapter end-to-end against a **fake tool on `PATH`**
+  (discovery, execution, ledger rows, resume skipping), and real suites when the
+  toolchain is installed. A `systems` CI job installs Go, cargo-nextest, RSpec,
+  PHPUnit and CMake, and fails if any of those tests skip.
+- Module adapters may now own their identity scheme: discovery rows may carry
+  `{"raw_id", "key"}`, which is how `go::pkg/Test`, `rspec::spec/a_spec.rb/1:2`
+  and `ctest::name` keep a sensible file tier.
+
+**Not added, on the record**
+- `.NET` (`dotnet test`). The only per-test machine-readable output is a TRX
+  file written at the end of the run, so a suite killed at the budget would
+  report nothing — and TRX was deliberately removed in 2.0. The console logger
+  streams, but prints display names rather than the fully-qualified ids a
+  resume needs. See the "not supported, and why" table in `docs/README.md`.
+
+**Fixed**
+- A killed record pass resumes instead of restarting: the adapters read the
+  ledger they are given and skip units that already have a verdict. Before, a
+  retry of the record pass re-ran and re-recorded finished files, so the store
+  counted them twice.
+- The manifest cache fingerprint covers each ecosystem's own files (`.go`,
+  `.rs`, `.rb`, `.php`, CMake lists), so editing one rebuilds the test list.
+
 ## 2.3.0 — 2026-10-20
 
 **Added**

@@ -4,7 +4,9 @@ An adapter is one of two kinds:
 
   module  a Python module that speaks the CLI
           ``--root DIR --collect-out FILE`` / ``--root DIR --ledger FILE
-          [--tests-file FILE]`` (unittest, pytest, junit)
+          [--tests-file FILE]``: unittest, pytest, junit, and the system
+          runners (go, nextest, rspec, phpunit, ctest), which drive their own
+          tool from that module
 
   node    a .cjs script run as ``node <script> collect|run ...``
           (mocha, jest, vitest, node:test, tap)
@@ -22,6 +24,11 @@ MODULE_ADAPTERS = {
     "unittest": "executor.adapters.unittest_stream",
     "pytest": "executor.adapters.pytest_stream",
     "junit": "executor.adapters.junit_stream",
+    "go": "executor.adapters.go_stream",
+    "nextest": "executor.adapters.nextest_stream",
+    "rspec": "executor.adapters.rspec_stream",
+    "phpunit": "executor.adapters.phpunit_stream",
+    "ctest": "executor.adapters.ctest_stream",
 }
 
 NODE_ADAPTERS = {

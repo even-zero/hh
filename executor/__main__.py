@@ -25,7 +25,12 @@ def cmd_run(args):
     from .tool import execute_plan
     with open(args.plan, encoding="utf-8") as f:
         plan = json.load(f)
-    res = execute_plan(plan, args.root, runner=args.runner,
+    planned = plan.get("runner")
+    if args.runner and planned and args.runner != planned:
+        print(f"hh: this plan was built for --runner {planned}, "
+              f"not {args.runner}", file=sys.stderr)
+        return 2
+    res = execute_plan(plan, args.root, runner=args.runner or planned,
                        store_root=args.store_root,
                        log=lambda *a: print(*a, file=sys.stderr))
     print(json.dumps(res))
@@ -72,7 +77,9 @@ def main(argv=None) -> int:
     p = sub.add_parser("run", help="execute a plan and record it")
     p.add_argument("--plan", required=True)
     p.add_argument("--root", required=True)
-    p.add_argument("--runner", default="unittest", choices=registry.RUNNERS)
+    # optional: the plan records its runner, and a plan must not be executed by
+    # a different adapter than the one that enumerated it
+    p.add_argument("--runner", default=None, choices=registry.RUNNERS)
     p.set_defaults(fn=cmd_run)
 
     p = sub.add_parser("report", help="what this store has measured")

@@ -55,6 +55,40 @@ TOOL_SPEC = {
 SKIP_DIRS = {".git", "node_modules", "__pycache__", ".venv", "venv", "build",
              "dist", ".tox", ".mypy_cache", ".pytest_cache", ".hh", "site-packages"}
 
+# Module adapters that enumerate out of process (everything but unittest, which
+# imports the tree, and pytest, whose ids are plain strings).
+EXTERNAL_MODULE_RUNNERS = set(registry.MODULE_ADAPTERS) - {"unittest", "pytest"}
+
+# What counts as "the suite changed" for the manifest cache.
+TREE_EXTS = {
+    "junit": (".java", ".kt", ".kts", ".class", ".xml"),
+    "go": (".go", ".mod", ".sum"),
+    "nextest": (".rs", ".toml", ".lock"),
+    "rspec": (".rb", ".gemspec"),
+    "phpunit": (".php", ".xml"),
+    "ctest": (".c", ".cc", ".cpp", ".cxx", ".h", ".hh", ".hpp", ".cmake",
+              ".txt"),
+}
+
+
+def _read_adapter_ids(runner: str, path: str) -> dict[str, str]:
+    """Read `{raw_id, key}` discovery rows into key -> raw id."""
+    out: dict[str, str] = {}
+    with open(path, encoding="utf-8") as f:
+        for line in f:
+            if not line.strip():
+                continue
+            try:
+                row = json.loads(line)
+            except ValueError:
+                raise RuntimeError(f"{runner} collection wrote a malformed id: "
+                                   + line[:200])
+            if not isinstance(row, dict) or "key" not in row or "raw_id" not in row:
+                raise RuntimeError(f"{runner} collection wrote an id without a "
+                                   "key: " + line[:200])
+            out[row["key"]] = row["raw_id"]
+    return out
+
 
 def _tree_fingerprint(root: str, runner: str) -> str:
     import hashlib
@@ -62,9 +96,7 @@ def _tree_fingerprint(root: str, runner: str) -> str:
     h.update(runner.encode())
     exts = ((".js", ".cjs", ".mjs", ".json", ".ts", ".tsx", ".jsx",
              ".mts", ".cts")
-            if registry.is_node(runner) else (".py",))
-    if runner == "junit":
-        exts = (".java", ".kt", ".kts", ".class", ".xml")
+            if registry.is_node(runner) else TREE_EXTS.get(runner, (".py",)))
     for dirpath, dirnames, filenames in os.walk(root):
         dirnames[:] = sorted(d for d in dirnames
                              if d not in SKIP_DIRS and not d.startswith("."))
@@ -113,6 +145,7 @@ def collect_manifest(root: str, runner: str, meter: Meter,
         [pkg_parent, child_env.get("PYTHONPATH", "")]).rstrip(os.pathsep)
 
     raw_ids: list[str] = []
+    adapter_keys: dict[str, str] | None = None
     with meter.span("collect"):
         if runner == "pytest":
             with tempfile.TemporaryDirectory(prefix="hh-collect-") as tmp:
@@ -126,19 +159,6 @@ def collect_manifest(root: str, runner: str, meter: Meter,
                                        + (proc.stdout + proc.stderr)[-2000:])
                 with open(out, encoding="utf-8") as f:
                     raw_ids = [json.loads(line) for line in f]
-        elif runner == "junit":
-            with tempfile.TemporaryDirectory(prefix="hh-collect-") as tmp:
-                out = os.path.join(tmp, "junit-ids.jsonl")
-                proc = subprocess.run(
-                    [sys.executable, "-m", "executor.adapters.junit_stream",
-                     "--root", root_abs, "--collect-out", out],
-                    capture_output=True, text=True, env=child_env)
-                if proc.returncode != 0 or not os.path.exists(out):
-                    raise RuntimeError("JUnit collection failed: "
-                                       + (proc.stdout + proc.stderr)[-2000:])
-                with open(out, encoding="utf-8") as f:
-                    raw_ids = [json.loads(line)["raw_id"]
-                               for line in f if line.strip()]
         elif registry.is_node(runner):
             script = registry.node_script(runner)
             with tempfile.TemporaryDirectory(prefix="hh-collect-") as tmp:
@@ -148,21 +168,20 @@ def collect_manifest(root: str, runner: str, meter: Meter,
                 if proc.returncode != 0 or not os.path.exists(out):
                     raise RuntimeError(f"{runner} collection failed: "
                                        + (proc.stdout + proc.stderr)[-2000:])
-                entries = []
-                with open(out, encoding="utf-8") as f:
-                    for line in f:
-                        if not line.strip():
-                            continue
-                        row = json.loads(line)
-                        if not isinstance(row, dict) or "key" not in row:
-                            raise RuntimeError(f"{runner} collection produced "
-                                               "a malformed id: " + line[:200])
-                        entries.append(row)
-            # The JS adapters own their identity scheme (path-relative file, or
-            # Mocha's full title with collision suffixes). Re-normalising it
-            # here would produce keys the ledger never writes.
-            raw_of = {e["key"]: e["raw_id"] for e in entries}
-            raw_ids = list(raw_of)
+                adapter_keys = _read_adapter_ids(runner, out)
+        elif runner in EXTERNAL_MODULE_RUNNERS:
+            # junit, go, nextest, rspec, phpunit, ctest: a Python module that
+            # drives the runner and owns its identity scheme.
+            with tempfile.TemporaryDirectory(prefix="hh-collect-") as tmp:
+                out = os.path.join(tmp, "ids.jsonl")
+                proc = subprocess.run(
+                    [sys.executable, "-m", registry.module_name(runner),
+                     "--root", root_abs, "--collect-out", out],
+                    capture_output=True, text=True, env=child_env)
+                if proc.returncode != 0 or not os.path.exists(out):
+                    raise RuntimeError(f"{runner} collection failed: "
+                                       + (proc.stdout + proc.stderr)[-2000:])
+                adapter_keys = _read_adapter_ids(runner, out)
         else:
             # unittest: import the modules and enumerate (no execution)
             for name, mod in list(sys.modules.items()):
@@ -176,8 +195,13 @@ def collect_manifest(root: str, runner: str, meter: Meter,
             raw_ids, errors = discover_ids(root_abs)
             if not raw_ids and errors:
                 raise RuntimeError("unittest collection failed: " + "; ".join(errors[:5]))
-    raw_ids = list(dict.fromkeys(raw_ids))
-    if not registry.is_node(runner):
+    if adapter_keys is not None:
+        # Those adapters own their identity scheme (Mocha's full titles, a
+        # file path for the file-level JS runners, package::test for Go, …).
+        # Re-normalising here would produce keys the ledger never writes.
+        raw_of = adapter_keys
+    else:
+        raw_ids = list(dict.fromkeys(raw_ids))
         raw_of = {key: raw for raw, key in unique_key_map(raw_ids, runner).items()}
     collection_s = round(meter.spans_ms.get("collect", 0.0) / 1000.0, 3)
     if cache_path:
@@ -229,7 +253,11 @@ def build_plan(root: str, runner: str = "unittest", store_root: str = ".",
         plan = policy.record_plan(checkpoint_dir=policy.new_checkpoint_dir(store_root),
                                   budget_s=budget_s or policy.RECORD_BUDGET_S)
         plan.overhead_ms = meter.total_ms
-        return json.loads(plan.to_json())
+        out = json.loads(plan.to_json())
+        # The plan says which runner produced it: `hh run` must not have to be
+        # told again, and cannot silently run a different adapter.
+        out["runner"] = runner
+        return out
 
     keys, raw_of, collected_s = collect_manifest(root, runner, meter, store_root)
     est = estimator.estimate(keys, st)
@@ -244,12 +272,20 @@ def build_plan(root: str, runner: str = "unittest", store_root: str = ".",
     plan.manifest_size = len(keys)
     plan.measured_tests = sum(1 for k in keys if k in measured)
     plan.overhead_ms = meter.total_ms
-    return json.loads(plan.to_json())
+    out = json.loads(plan.to_json())
+    out["runner"] = runner
+    return out
 
 
-def execute_plan(plan: dict, root: str, runner: str = "unittest",
+def execute_plan(plan: dict, root: str, runner: str | None = None,
                  store_root: str = ".", log=lambda *a: None) -> dict:
-    """execute + record step."""
+    """execute + record step.
+
+    The runner comes from the plan unless the caller names one; a plan written
+    for `node-test` must not be executed by the unittest adapter because a
+    default was left in place.
+    """
+    runner = runner or plan.get("runner") or "unittest"
     from .runner import execute, done_map
     st = store_mod.Store(store_root)
     ledger = os.path.join(plan["checkpoint_dir"], "ledger.jsonl")
