@@ -29,6 +29,11 @@ Two fix rounds followed:
 - `REPORT-2026-10-20-cold-start.md` — the sampling/prior machinery is gone: a
   cold store is a **record pass** (naive invocation + ledger). Cold is judged on
   parity with the naive run of the same suite; warm lanes are unchanged.
+- `REPORT-2026-10-20-warm-pass.md` — **read this one for the warm lanes**: what
+  a warm pass costs stage by stage, an alternating A/B against the repo's own
+  command (`benchmark/interleave.py`), and the budget probe
+  (`benchmark/budget_probe.py`) that shows where a measured budget pays. Its
+  numbers supersede the warm columns of the cold-start report.
 
 `repos.fresh.json` is a self-contained five-repo set (markdown, click, express,
 werkzeug, urllib3) used for the cross-repo comparison report

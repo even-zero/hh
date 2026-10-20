@@ -1,5 +1,9 @@
 # Round 2 — a cold start is a record pass, not a prediction
 
+> **Superseded for warm numbers.** The warm columns below were measured before
+> the node-id execution path and the `attempts` fix. Current warm/normalized
+> numbers: `REPORT-2026-10-20-warm-pass.md`.
+
 **Date:** 2026-10-20 · **Branch:** `arena/221c8a97-hh` (PR #2)
 **Repos:** the five fresh repos of `benchmark/repos.fresh.json` (markdown, click,
 express, werkzeug, urllib3) · **Runner:** `python3 -m benchmark --repos-file

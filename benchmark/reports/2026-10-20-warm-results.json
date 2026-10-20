@@ -1,0 +1,1482 @@
+{
+ "schema": 1,
+ "meta": {
+  "date": "2026-10-20",
+  "hh_version": "1.0.0",
+  "hh_commit": "4d6a0d2",
+  "hh_dirty": false,
+  "python": "3.11.2",
+  "platform": "Linux-6.1.158+-x86_64-with-glibc2.36",
+  "cores": 2,
+  "repos_file": "benchmark/repos.fresh.json",
+  "repos": {
+   "markdown": "https://github.com/python-markdown/markdown.git@934c53e437",
+   "click": "https://github.com/pallets/click.git@2247b35ea1",
+   "express": "https://github.com/expressjs/express.git@0dee2c52c7",
+   "werkzeug": "https://github.com/pallets/werkzeug.git@665e760ca6",
+   "urllib3": "https://github.com/urllib3/urllib3.git@a37bc93b65"
+  }
+ },
+ "compat": [
+  {
+   "repo": "markdown",
+   "runner": "unittest",
+   "tests": 1129,
+   "discovered": 1129,
+   "level": "record",
+   "reasons": null
+  },
+  {
+   "repo": "click",
+   "runner": "pytest",
+   "tests": 2287,
+   "discovered": 2287,
+   "level": "record",
+   "reasons": null
+  },
+  {
+   "repo": "express",
+   "runner": "node",
+   "tests": 1261,
+   "discovered": 1261,
+   "level": "record",
+   "reasons": null
+  },
+  {
+   "repo": "werkzeug",
+   "runner": "pytest",
+   "tests": 994,
+   "discovered": 1019,
+   "level": "record",
+   "reasons": null
+  },
+  {
+   "repo": "urllib3",
+   "runner": "pytest",
+   "tests": 2048,
+   "discovered": 2808,
+   "level": "record",
+   "reasons": null
+  }
+ ],
+ "attempt_logs": {
+  "markdown": [
+   {
+    "policy": "naive-default",
+    "suite_id": "markdown",
+    "attempt": 1,
+    "budget_s": 30.0,
+    "outcome": "ok",
+    "wall_ms": 967.4,
+    "wasted_ms": 0.0,
+    "overhead_ms": 0.0,
+    "scenario": "clean",
+    "arm": "naive"
+   },
+   {
+    "policy": "naive-reference",
+    "suite_id": "markdown",
+    "attempt": 99,
+    "budget_s": 120.0,
+    "outcome": "ok",
+    "wall_ms": 1021.0,
+    "wasted_ms": 0.0,
+    "overhead_ms": 0.0,
+    "scenario": "clean",
+    "arm": "naive"
+   },
+   {
+    "ts": 1792476048.7050855,
+    "policy": "hh-full",
+    "suite_id": "markdown-clean-cold",
+    "attempt": 1,
+    "budget_s": 30.0,
+    "outcome": "ok",
+    "wall_ms": 1026.6,
+    "wasted_ms": 0.0,
+    "overhead_ms": 31.627,
+    "scenario": "(hh-full)"
+   },
+   {
+    "ts": 1792476049.8784,
+    "policy": "hh-full",
+    "suite_id": "markdown-clean-warm",
+    "attempt": 1,
+    "budget_s": 3.0,
+    "outcome": "ok",
+    "wall_ms": 997.9,
+    "wasted_ms": 0.0,
+    "overhead_ms": 61.37,
+    "scenario": "(hh-full)"
+   },
+   {
+    "ts": 1792476051.0823946,
+    "policy": "hh-full",
+    "suite_id": "markdown-w2",
+    "attempt": 1,
+    "budget_s": 3.0,
+    "outcome": "ok",
+    "wall_ms": 1023.1,
+    "wasted_ms": 0.0,
+    "overhead_ms": 66.628,
+    "scenario": "(hh-full)"
+   }
+  ],
+  "click": [
+   {
+    "policy": "naive-default",
+    "suite_id": "click",
+    "attempt": 1,
+    "budget_s": 30.0,
+    "outcome": "ok",
+    "wall_ms": 6488.2,
+    "wasted_ms": 0.0,
+    "overhead_ms": 0.0,
+    "scenario": "clean",
+    "arm": "naive"
+   },
+   {
+    "policy": "naive-reference",
+    "suite_id": "click",
+    "attempt": 99,
+    "budget_s": 120.0,
+    "outcome": "ok",
+    "wall_ms": 6089.0,
+    "wasted_ms": 0.0,
+    "overhead_ms": 0.0,
+    "scenario": "clean",
+    "arm": "naive"
+   },
+   {
+    "policy": "naive-default",
+    "suite_id": "click",
+    "attempt": 1,
+    "budget_s": 3.1,
+    "outcome": "timeout",
+    "wall_ms": 3107.0,
+    "wasted_ms": 3107.0,
+    "overhead_ms": 0.0,
+    "scenario": "resume",
+    "arm": "naive"
+   },
+   {
+    "policy": "naive-default",
+    "suite_id": "click",
+    "attempt": 2,
+    "budget_s": 120.0,
+    "outcome": "ok",
+    "wall_ms": 6592.7,
+    "wasted_ms": 0.0,
+    "overhead_ms": 0.0,
+    "scenario": "resume",
+    "arm": "naive"
+   },
+   {
+    "policy": "hh-checkpointed",
+    "suite_id": "click",
+    "attempt": 1,
+    "budget_s": 3.1,
+    "outcome": "timeout",
+    "wall_ms": 3101.9,
+    "wasted_ms": 3101.9,
+    "overhead_ms": 0.0,
+    "scenario": "resume",
+    "arm": "hh"
+   },
+   {
+    "ts": 1792476076.9925854,
+    "policy": "hh-full",
+    "suite_id": "click-clean-cold",
+    "attempt": 1,
+    "budget_s": 30.0,
+    "outcome": "ok",
+    "wall_ms": 7007.1,
+    "wasted_ms": 0.0,
+    "overhead_ms": 68.841,
+    "scenario": "(hh-full)"
+   },
+   {
+    "ts": 1792476083.535671,
+    "policy": "hh-full",
+    "suite_id": "click-clean-warm",
+    "attempt": 1,
+    "budget_s": 6.016,
+    "outcome": "ok",
+    "wall_ms": 6196.8,
+    "wasted_ms": 0.0,
+    "overhead_ms": 141.185,
+    "scenario": "(hh-full)"
+   },
+   {
+    "ts": 1792476087.7527764,
+    "policy": "hh-full",
+    "suite_id": "click-w2",
+    "attempt": 1,
+    "budget_s": 6.25,
+    "outcome": "ok",
+    "wall_ms": 3952.0,
+    "wasted_ms": 0.0,
+    "overhead_ms": 141.632,
+    "scenario": "(hh-full)"
+   },
+   {
+    "ts": 1792476108.4453373,
+    "policy": "hh-full",
+    "suite_id": "click-resume-finish",
+    "attempt": 1,
+    "budget_s": 2.641,
+    "outcome": "ok",
+    "wall_ms": 4356.0,
+    "wasted_ms": 0.0,
+    "overhead_ms": 3221.621,
+    "scenario": "(hh-full)"
+   }
+  ],
+  "express": [
+   {
+    "policy": "naive-default",
+    "suite_id": "express",
+    "attempt": 1,
+    "budget_s": 30.0,
+    "outcome": "ok",
+    "wall_ms": 3426.0,
+    "wasted_ms": 0.0,
+    "overhead_ms": 0.0,
+    "scenario": "clean",
+    "arm": "naive"
+   },
+   {
+    "policy": "naive-reference",
+    "suite_id": "express",
+    "attempt": 99,
+    "budget_s": 120.0,
+    "outcome": "ok",
+    "wall_ms": 3591.1,
+    "wasted_ms": 0.0,
+    "overhead_ms": 0.0,
+    "scenario": "clean",
+    "arm": "naive"
+   },
+   {
+    "policy": "naive-default",
+    "suite_id": "express",
+    "attempt": 1,
+    "budget_s": 2.0,
+    "outcome": "timeout",
+    "wall_ms": 2011.1,
+    "wasted_ms": 2011.1,
+    "overhead_ms": 0.0,
+    "scenario": "resume",
+    "arm": "naive"
+   },
+   {
+    "policy": "naive-default",
+    "suite_id": "express",
+    "attempt": 2,
+    "budget_s": 120.0,
+    "outcome": "ok",
+    "wall_ms": 3832.0,
+    "wasted_ms": 0.0,
+    "overhead_ms": 0.0,
+    "scenario": "resume",
+    "arm": "naive"
+   },
+   {
+    "policy": "hh-checkpointed",
+    "suite_id": "express",
+    "attempt": 1,
+    "budget_s": 2.0,
+    "outcome": "timeout",
+    "wall_ms": 2002.0,
+    "wasted_ms": 2002.0,
+    "overhead_ms": 0.0,
+    "scenario": "resume",
+    "arm": "hh"
+   },
+   {
+    "ts": 1792476119.902043,
+    "policy": "hh-full",
+    "suite_id": "express-clean-cold",
+    "attempt": 1,
+    "budget_s": 30.0,
+    "outcome": "ok",
+    "wall_ms": 3283.6,
+    "wasted_ms": 0.0,
+    "overhead_ms": 32.954,
+    "scenario": "(hh-full)"
+   },
+   {
+    "ts": 1792476123.4057095,
+    "policy": "hh-full",
+    "suite_id": "express-clean-warm",
+    "attempt": 1,
+    "budget_s": 3.522,
+    "outcome": "ok",
+    "wall_ms": 3290.1,
+    "wasted_ms": 0.0,
+    "overhead_ms": 75.439,
+    "scenario": "(hh-full)"
+   },
+   {
+    "ts": 1792476125.9680514,
+    "policy": "hh-full",
+    "suite_id": "express-w2",
+    "attempt": 1,
+    "budget_s": 3.633,
+    "outcome": "ok",
+    "wall_ms": 2393.9,
+    "wasted_ms": 0.0,
+    "overhead_ms": 67.15,
+    "scenario": "(hh-full)"
+   },
+   {
+    "ts": 1792476138.1615546,
+    "policy": "hh-full",
+    "suite_id": "express-resume-finish",
+    "attempt": 1,
+    "budget_s": 10.065,
+    "outcome": "ok",
+    "wall_ms": 3676.6,
+    "wasted_ms": 0.0,
+    "overhead_ms": 462.423,
+    "scenario": "(hh-full)"
+   }
+  ],
+  "werkzeug": [
+   {
+    "policy": "naive-default",
+    "suite_id": "werkzeug",
+    "attempt": 1,
+    "budget_s": 30.0,
+    "outcome": "ok",
+    "wall_ms": 5657.3,
+    "wasted_ms": 0.0,
+    "overhead_ms": 0.0,
+    "scenario": "clean",
+    "arm": "naive"
+   },
+   {
+    "policy": "naive-reference",
+    "suite_id": "werkzeug",
+    "attempt": 99,
+    "budget_s": 120.0,
+    "outcome": "ok",
+    "wall_ms": 6155.9,
+    "wasted_ms": 0.0,
+    "overhead_ms": 0.0,
+    "scenario": "clean",
+    "arm": "naive"
+   },
+   {
+    "policy": "hh-capture",
+    "suite_id": "werkzeug",
+    "attempt": 1,
+    "budget_s": 120.0,
+    "outcome": "ok",
+    "wall_ms": 5649.0,
+    "wasted_ms": 0.0,
+    "overhead_ms": 0.0,
+    "scenario": "clean",
+    "arm": "hh-capture"
+   },
+   {
+    "policy": "naive-doubling",
+    "suite_id": "werkzeug",
+    "attempt": 1,
+    "budget_s": 30.0,
+    "outcome": "timeout",
+    "wall_ms": 30006.0,
+    "wasted_ms": 30006.0,
+    "overhead_ms": 0.0,
+    "scenario": "hang",
+    "arm": "naive"
+   },
+   {
+    "policy": "naive-doubling",
+    "suite_id": "werkzeug",
+    "attempt": 2,
+    "budget_s": 60.0,
+    "outcome": "timeout",
+    "wall_ms": 60009.6,
+    "wasted_ms": 60009.6,
+    "overhead_ms": 0.0,
+    "scenario": "hang",
+    "arm": "naive"
+   },
+   {
+    "policy": "hh-capture",
+    "suite_id": "werkzeug",
+    "attempt": 1,
+    "budget_s": 30.0,
+    "outcome": "timeout",
+    "wall_ms": 30005.8,
+    "wasted_ms": 30005.8,
+    "overhead_ms": 0.0,
+    "scenario": "hang",
+    "arm": "hh-capture"
+   },
+   {
+    "policy": "hh-capture",
+    "suite_id": "werkzeug",
+    "attempt": 2,
+    "budget_s": 60.0,
+    "outcome": "timeout",
+    "wall_ms": 60005.1,
+    "wasted_ms": 60005.1,
+    "overhead_ms": 0.0,
+    "scenario": "hang",
+    "arm": "hh-capture"
+   },
+   {
+    "policy": "hh-capture",
+    "suite_id": "werkzeug",
+    "attempt": 3,
+    "budget_s": 120.0,
+    "outcome": "ok",
+    "wall_ms": 5331.6,
+    "wasted_ms": 0.0,
+    "overhead_ms": 0.0,
+    "scenario": "hang",
+    "arm": "hh-capture"
+   }
+  ],
+  "urllib3": [
+   {
+    "policy": "naive-default",
+    "suite_id": "urllib3",
+    "attempt": 1,
+    "budget_s": 30.0,
+    "outcome": "ok",
+    "wall_ms": 11552.5,
+    "wasted_ms": 0.0,
+    "overhead_ms": 0.0,
+    "scenario": "clean",
+    "arm": "naive"
+   },
+   {
+    "policy": "naive-reference",
+    "suite_id": "urllib3",
+    "attempt": 99,
+    "budget_s": 120.0,
+    "outcome": "ok",
+    "wall_ms": 11707.0,
+    "wasted_ms": 0.0,
+    "overhead_ms": 0.0,
+    "scenario": "clean",
+    "arm": "naive"
+   },
+   {
+    "policy": "hh-capture",
+    "suite_id": "urllib3",
+    "attempt": 1,
+    "budget_s": 120.0,
+    "outcome": "ok",
+    "wall_ms": 12157.0,
+    "wasted_ms": 0.0,
+    "overhead_ms": 0.0,
+    "scenario": "clean",
+    "arm": "hh-capture"
+   }
+  ]
+ },
+ "runs": {
+  "markdown": {
+   "plan_cold": {
+    "n": null,
+    "coverage": 0.0,
+    "measured_tests": 0,
+    "calibration": {
+     "basis": "cold"
+    },
+    "manifest": 0,
+    "startup_s": 0.0,
+    "n_unknown": null,
+    "pred_wall_s": null,
+    "pred_exec_wall_s": null,
+    "p50_s": null,
+    "p90_s": null,
+    "budget_s": 30.0,
+    "plan_overhead_ms": 0.2,
+    "level": "record",
+    "shards": 1,
+    "quarantine": []
+   },
+   "run_cold": {
+    "wall_s": 1.228,
+    "exec_wall_s": 0.981,
+    "startup_s": 0.169,
+    "overhead_ms": 33.25,
+    "attempts": 1.0,
+    "ingested": 1129,
+    "phases": [
+     {
+      "phase": "record",
+      "iteration": 1,
+      "tests_in_plan": 0,
+      "tests_executed": 1129,
+      "wall_s": 0.964,
+      "startup_s": 0.143,
+      "ingested": 1129,
+      "attempts": 1.0,
+      "censored": 0,
+      "plan_ms": 0.2,
+      "operating_level": "record",
+      "predicted_exec_wall_s": null
+     }
+    ],
+    "pred_exec_wall_s": null,
+    "receipt_s": 0.0,
+    "net_s": -0.0,
+    "complete": true,
+    "n_runs": 5
+   },
+   "plan_warm": {
+    "n": 1129,
+    "coverage": 1.0,
+    "measured_tests": 1129,
+    "calibration": {
+     "source_counts": {
+      "test": 1129,
+      "file": 0,
+      "suite": 0,
+      "unmeasured": 0
+     },
+     "suite_rate_ms": 0.663,
+     "suite_rows": 1129,
+     "basis": "measured"
+    },
+    "manifest": 1129,
+    "startup_s": 0.143,
+    "n_unknown": 0,
+    "pred_wall_s": 0.964,
+    "pred_exec_wall_s": 0.821,
+    "p50_s": 0.843,
+    "p90_s": 0.919,
+    "budget_s": 3.0,
+    "plan_overhead_ms": 18.9,
+    "level": "tiny",
+    "shards": 1,
+    "quarantine": []
+   },
+   "run_warm": {
+    "wall_s": 1.002,
+    "exec_wall_s": 0.878,
+    "startup_s": 0.125,
+    "overhead_ms": 58.57,
+    "attempts": 1.0,
+    "ingested": 1129,
+    "phases": [
+     {
+      "phase": "run",
+      "iteration": 1,
+      "tests_in_plan": 1129,
+      "tests_executed": 1129,
+      "wall_s": 0.928,
+      "startup_s": 0.125,
+      "ingested": 1129,
+      "attempts": 1.0,
+      "censored": 0,
+      "plan_ms": 18.9,
+      "operating_level": "tiny",
+      "predicted_exec_wall_s": 0.821
+     }
+    ],
+    "pred_exec_wall_s": 0.821,
+    "receipt_s": 0.0,
+    "net_s": -0.1,
+    "complete": true,
+    "n_runs": 5
+   },
+   "plan_w2": {
+    "n": 1129,
+    "coverage": 1.0,
+    "measured_tests": 1129,
+    "calibration": {
+     "source_counts": {
+      "test": 1129,
+      "file": 0,
+      "suite": 0,
+      "unmeasured": 0
+     },
+     "suite_rate_ms": 0.666,
+     "suite_rows": 2258,
+     "basis": "measured"
+    },
+    "manifest": 1129,
+    "startup_s": 0.143,
+    "n_unknown": 0,
+    "pred_wall_s": 1.003,
+    "pred_exec_wall_s": 0.86,
+    "p50_s": 0.883,
+    "p90_s": 0.966,
+    "budget_s": 3.0,
+    "plan_overhead_ms": 20.9,
+    "level": "tiny",
+    "shards": 1,
+    "quarantine": []
+   },
+   "run_w2": {
+    "wall_s": 1.023,
+    "exec_wall_s": 0.909,
+    "startup_s": 0.114,
+    "overhead_ms": 66.628,
+    "ingested": 1129
+   },
+   "record": {
+    "naive_s": 0.967,
+    "hh_s": 1.228,
+    "delta_pct": 26.94,
+    "naive_tests": null,
+    "measured_after": 1129,
+    "level": "record",
+    "n_runs": 5
+   },
+   "warm": {
+    "naive_s": 0.967,
+    "hh_s": 1.002,
+    "delta_pct": 3.58,
+    "predicted_wall_s": 0.964,
+    "n_runs": 5
+   },
+   "resume": {
+    "kill_at_s": null,
+    "baseline_wall_s": null,
+    "plan_resume": null,
+    "run_finish_wall_s": null,
+    "resumed_tests": null,
+    "resumed_s": null,
+    "overhead_ms": null,
+    "receipt": null
+   }
+  },
+  "click": {
+   "plan_cold": {
+    "n": null,
+    "coverage": 0.0,
+    "measured_tests": 0,
+    "calibration": {
+     "basis": "cold"
+    },
+    "manifest": 0,
+    "startup_s": 0.0,
+    "n_unknown": null,
+    "pred_wall_s": null,
+    "pred_exec_wall_s": null,
+    "p50_s": null,
+    "p90_s": null,
+    "budget_s": 30.0,
+    "plan_overhead_ms": 0.1,
+    "level": "record",
+    "shards": 1,
+    "quarantine": []
+   },
+   "run_cold": {
+    "wall_s": 7.765,
+    "exec_wall_s": 5.67,
+    "startup_s": 2.094,
+    "overhead_ms": 68.841,
+    "attempts": 1.0,
+    "ingested": 2287,
+    "phases": [
+     {
+      "phase": "record",
+      "iteration": 1,
+      "tests_in_plan": 0,
+      "tests_executed": 2287,
+      "wall_s": 6.891,
+      "startup_s": 1.859,
+      "ingested": 2287,
+      "attempts": 1.0,
+      "censored": 0,
+      "plan_ms": 0.1,
+      "operating_level": "record",
+      "predicted_exec_wall_s": null
+     }
+    ],
+    "pred_exec_wall_s": null,
+    "receipt_s": 0.0,
+    "net_s": -0.1,
+    "complete": true,
+    "n_runs": 5
+   },
+   "plan_warm": {
+    "n": 2287,
+    "coverage": 1.0,
+    "measured_tests": 2287,
+    "calibration": {
+     "source_counts": {
+      "test": 2287,
+      "file": 0,
+      "suite": 0,
+      "unmeasured": 0
+     },
+     "suite_rate_ms": 1.267,
+     "suite_rows": 2287,
+     "basis": "measured"
+    },
+    "manifest": 2287,
+    "startup_s": 1.859,
+    "n_unknown": 0,
+    "pred_wall_s": 6.89,
+    "pred_exec_wall_s": 5.031,
+    "p50_s": 5.122,
+    "p90_s": 5.232,
+    "budget_s": 6.016,
+    "plan_overhead_ms": 66.3,
+    "level": "full",
+    "shards": 1,
+    "quarantine": []
+   },
+   "run_warm": {
+    "wall_s": 7.308,
+    "exec_wall_s": 4.833,
+    "startup_s": 2.446,
+    "overhead_ms": 124.816,
+    "attempts": 1.0,
+    "ingested": 2287,
+    "phases": [
+     {
+      "phase": "run",
+      "iteration": 1,
+      "tests_in_plan": 2287,
+      "tests_executed": 2287,
+      "wall_s": 6.07,
+      "startup_s": 2.244,
+      "ingested": 2287,
+      "attempts": 1.0,
+      "censored": 0,
+      "plan_ms": 66.3,
+      "operating_level": "full",
+      "predicted_exec_wall_s": 5.031
+     }
+    ],
+    "pred_exec_wall_s": 5.031,
+    "receipt_s": 0.0,
+    "net_s": -0.1,
+    "complete": true,
+    "n_runs": 5
+   },
+   "plan_w2": {
+    "n": 2287,
+    "coverage": 1.0,
+    "measured_tests": 2287,
+    "calibration": {
+     "source_counts": {
+      "test": 2287,
+      "file": 0,
+      "suite": 0,
+      "unmeasured": 0
+     },
+     "suite_rate_ms": 1.233,
+     "suite_rows": 4574,
+     "basis": "measured"
+    },
+    "manifest": 2287,
+    "startup_s": 1.859,
+    "n_unknown": 0,
+    "pred_wall_s": 5.523,
+    "pred_exec_wall_s": 3.664,
+    "p50_s": 5.306,
+    "p90_s": 5.435,
+    "budget_s": 6.25,
+    "plan_overhead_ms": 65.5,
+    "level": "full",
+    "shards": 2,
+    "quarantine": []
+   },
+   "run_w2": {
+    "wall_s": 3.952,
+    "exec_wall_s": 1.931,
+    "startup_s": 4.041,
+    "overhead_ms": 141.632,
+    "ingested": 2287
+   },
+   "record": {
+    "naive_s": 7.386,
+    "hh_s": 7.765,
+    "delta_pct": 5.14,
+    "naive_tests": null,
+    "measured_after": 2287,
+    "level": "record",
+    "n_runs": 5
+   },
+   "warm": {
+    "naive_s": 7.386,
+    "hh_s": 7.308,
+    "delta_pct": -1.05,
+    "predicted_wall_s": 6.89,
+    "n_runs": 5
+   },
+   "resume": {
+    "kill_at_s": 3.1,
+    "baseline_wall_s": 6.197,
+    "plan_resume": {
+     "n": 2287,
+     "coverage": 0.415,
+     "measured_tests": 916,
+     "calibration": {
+      "source_counts": {
+       "test": 916,
+       "file": 627,
+       "suite": 744,
+       "unmeasured": 0
+      },
+      "suite_rate_ms": 0.904,
+      "suite_rows": 916,
+      "basis": "measured+extrapolated"
+     },
+     "manifest": 2287,
+     "startup_s": 3.124,
+     "n_unknown": 1371,
+     "pred_wall_s": 5.119,
+     "pred_exec_wall_s": 1.995,
+     "p50_s": 2.251,
+     "p90_s": 2.297,
+     "budget_s": 2.641,
+     "plan_overhead_ms": 3174.3,
+     "level": "full",
+     "shards": 1,
+     "quarantine": []
+    },
+    "run_finish_wall_s": 4.356,
+    "resumed_tests": 916,
+    "resumed_s": 0.8280570000000009,
+    "overhead_ms": 3221.621,
+    "receipt": {
+     "job_store": "/home/user/hh/benchmark/_work/stores/click-resume-hh",
+     "this_call_ms": 828.1,
+     "this_call_s": 0.8,
+     "job_id": "click-resume",
+     "job_total_s": 0.8,
+     "job_total_ms": 828.1,
+     "job_suites": 1,
+     "breakdown": [
+      {
+       "kind": "resume",
+       "ms": 828.1,
+       "basis": "916 test(s) already on this job's ledger were not re-executed \u2014 paid once, in this job"
+      }
+     ],
+     "how": "conservative: only work a restart-from-zero baseline provably re-pays is credited (ledger-backed); unbounded waits are noted, not summed; net = credited \u2212 tool overhead \u2014 see TIME_SAVED.md",
+     "overhead_ms": 3221.6,
+     "overhead_s": 3.222,
+     "net_ms": -2393.5,
+     "net_s": -2.4,
+     "this_call_wall_s": 4.356
+    }
+   }
+  },
+  "express": {
+   "plan_cold": {
+    "n": null,
+    "coverage": 0.0,
+    "measured_tests": 0,
+    "calibration": {
+     "basis": "cold"
+    },
+    "manifest": 0,
+    "startup_s": 0.0,
+    "n_unknown": null,
+    "pred_wall_s": null,
+    "pred_exec_wall_s": null,
+    "p50_s": null,
+    "p90_s": null,
+    "budget_s": 30.0,
+    "plan_overhead_ms": 0.2,
+    "level": "record",
+    "shards": 1,
+    "quarantine": []
+   },
+   "run_cold": {
+    "wall_s": 4.277,
+    "exec_wall_s": 3.826,
+    "startup_s": 0.359,
+    "overhead_ms": 55.123,
+    "attempts": 1.0,
+    "ingested": 1261,
+    "phases": [
+     {
+      "phase": "record",
+      "iteration": 1,
+      "tests_in_plan": 0,
+      "tests_executed": 1261,
+      "wall_s": 3.222,
+      "startup_s": 0.323,
+      "ingested": 1261,
+      "attempts": 1.0,
+      "censored": 0,
+      "plan_ms": 0.2,
+      "operating_level": "record",
+      "predicted_exec_wall_s": null
+     }
+    ],
+    "pred_exec_wall_s": null,
+    "receipt_s": 0.0,
+    "net_s": -0.0,
+    "complete": true,
+    "n_runs": 5
+   },
+   "plan_warm": {
+    "n": 1261,
+    "coverage": 1.0,
+    "measured_tests": 1261,
+    "calibration": {
+     "source_counts": {
+      "test": 1261,
+      "file": 0,
+      "suite": 0,
+      "unmeasured": 0
+     },
+     "suite_rate_ms": 2.108,
+     "suite_rows": 1261,
+     "basis": "measured"
+    },
+    "manifest": 1261,
+    "startup_s": 0.323,
+    "n_unknown": 0,
+    "pred_wall_s": 3.222,
+    "pred_exec_wall_s": 2.899,
+    "p50_s": 2.983,
+    "p90_s": 3.063,
+    "budget_s": 3.522,
+    "plan_overhead_ms": 35.4,
+    "level": "full",
+    "shards": 1,
+    "quarantine": []
+   },
+   "run_warm": {
+    "wall_s": 4.555,
+    "exec_wall_s": 4.05,
+    "startup_s": 0.376,
+    "overhead_ms": 72.413,
+    "attempts": 1.0,
+    "ingested": 1261,
+    "phases": [
+     {
+      "phase": "run",
+      "iteration": 1,
+      "tests_in_plan": 1261,
+      "tests_executed": 1261,
+      "wall_s": 3.223,
+      "startup_s": 0.352,
+      "ingested": 1261,
+      "attempts": 1.0,
+      "censored": 0,
+      "plan_ms": 35.4,
+      "operating_level": "full",
+      "predicted_exec_wall_s": 2.899
+     }
+    ],
+    "pred_exec_wall_s": 2.899,
+    "receipt_s": 0.0,
+    "net_s": -0.1,
+    "complete": true,
+    "n_runs": 5
+   },
+   "plan_w2": {
+    "n": 1261,
+    "coverage": 1.0,
+    "measured_tests": 1261,
+    "calibration": {
+     "source_counts": {
+      "test": 1261,
+      "file": 0,
+      "suite": 0,
+      "unmeasured": 0
+     },
+     "suite_rate_ms": 2.097,
+     "suite_rows": 2522,
+     "basis": "measured"
+    },
+    "manifest": 1261,
+    "startup_s": 0.323,
+    "n_unknown": 0,
+    "pred_wall_s": 1.937,
+    "pred_exec_wall_s": 1.614,
+    "p50_s": 3.074,
+    "p90_s": 3.159,
+    "budget_s": 3.633,
+    "plan_overhead_ms": 23.2,
+    "level": "full",
+    "shards": 2,
+    "quarantine": []
+   },
+   "run_w2": {
+    "wall_s": 2.394,
+    "exec_wall_s": 1.977,
+    "startup_s": 0.831,
+    "overhead_ms": 67.15,
+    "ingested": 1261
+   },
+   "record": {
+    "naive_s": 4.057,
+    "hh_s": 4.277,
+    "delta_pct": 5.41,
+    "naive_tests": null,
+    "measured_after": 1261,
+    "level": "record",
+    "n_runs": 5
+   },
+   "warm": {
+    "naive_s": 4.057,
+    "hh_s": 4.555,
+    "delta_pct": 12.26,
+    "predicted_wall_s": 3.222,
+    "n_runs": 5
+   },
+   "resume": {
+    "kill_at_s": 2.0,
+    "baseline_wall_s": 3.29,
+    "plan_resume": {
+     "n": 1261,
+     "coverage": 0.208,
+     "measured_tests": 251,
+     "calibration": {
+      "source_counts": {
+       "test": 251,
+       "file": 127,
+       "suite": 883,
+       "unmeasured": 0
+      },
+      "suite_rate_ms": 6.087,
+      "suite_rows": 251,
+      "basis": "measured+extrapolated"
+     },
+     "manifest": 1261,
+     "startup_s": 0.397,
+     "n_unknown": 1010,
+     "pred_wall_s": 7.75,
+     "pred_exec_wall_s": 7.353,
+     "p50_s": 8.549,
+     "p90_s": 8.752,
+     "budget_s": 10.065,
+     "plan_overhead_ms": 421.9,
+     "level": "full",
+     "shards": 1,
+     "quarantine": []
+    },
+    "run_finish_wall_s": 3.677,
+    "resumed_tests": 251,
+    "resumed_s": 1.527933011999998,
+    "overhead_ms": 462.423,
+    "receipt": {
+     "job_store": "/home/user/hh/benchmark/_work/stores/express-resume-hh",
+     "this_call_ms": 1527.9,
+     "this_call_s": 1.5,
+     "job_id": "express-resume",
+     "job_total_s": 1.5,
+     "job_total_ms": 1527.9,
+     "job_suites": 1,
+     "breakdown": [
+      {
+       "kind": "resume",
+       "ms": 1527.9,
+       "basis": "251 test(s) already on this job's ledger were not re-executed \u2014 paid once, in this job"
+      }
+     ],
+     "how": "conservative: only work a restart-from-zero baseline provably re-pays is credited (ledger-backed); unbounded waits are noted, not summed; net = credited \u2212 tool overhead \u2014 see TIME_SAVED.md",
+     "overhead_ms": 462.4,
+     "overhead_s": 0.462,
+     "net_ms": 1065.5,
+     "net_s": 1.1,
+     "this_call_wall_s": 3.677
+    }
+   }
+  }
+ },
+ "receipts": {
+  "markdown-hang": {
+   "job_id": "markdown-hang",
+   "total_ms": 0,
+   "total_s": 0.0,
+   "suites": 0,
+   "by_kind": [],
+   "latest_basis": null,
+   "entries": []
+  },
+  "markdown-resume": {
+   "job_id": "markdown-resume",
+   "total_ms": 0,
+   "total_s": 0.0,
+   "suites": 0,
+   "by_kind": [],
+   "latest_basis": null,
+   "entries": []
+  },
+  "markdown-clean": {
+   "job_id": "markdown-clean",
+   "total_ms": 0,
+   "total_s": 0.0,
+   "suites": 0,
+   "by_kind": [],
+   "latest_basis": null,
+   "entries": []
+  },
+  "click-hang": {
+   "job_id": "click-hang",
+   "total_ms": 0,
+   "total_s": 0.0,
+   "suites": 0,
+   "by_kind": [],
+   "latest_basis": null,
+   "entries": []
+  },
+  "click-resume": {
+   "job_id": "click-resume",
+   "total_ms": 828.1,
+   "total_s": 0.8,
+   "suites": 1,
+   "by_kind": [
+    {
+     "kind": "resume",
+     "ms": 828.1,
+     "events": 1
+    }
+   ],
+   "latest_basis": "916 test(s) already on this job's ledger were not re-executed \u2014 paid once, in this job",
+   "entries": [
+    {
+     "kind": "resume",
+     "saved_s": 0.8,
+     "claim_rule": "916 test(s) already on this job's ledger were not re-executed \u2014 paid once, in this job"
+    }
+   ]
+  },
+  "click-clean": {
+   "job_id": "click-clean",
+   "total_ms": 0,
+   "total_s": 0.0,
+   "suites": 0,
+   "by_kind": [],
+   "latest_basis": null,
+   "entries": []
+  },
+  "express-hang": {
+   "job_id": "express-hang",
+   "total_ms": 0,
+   "total_s": 0.0,
+   "suites": 0,
+   "by_kind": [],
+   "latest_basis": null,
+   "entries": []
+  },
+  "express-resume": {
+   "job_id": "express-resume",
+   "total_ms": 1527.9,
+   "total_s": 1.5,
+   "suites": 1,
+   "by_kind": [
+    {
+     "kind": "resume",
+     "ms": 1527.9,
+     "events": 1
+    }
+   ],
+   "latest_basis": "251 test(s) already on this job's ledger were not re-executed \u2014 paid once, in this job",
+   "entries": [
+    {
+     "kind": "resume",
+     "saved_s": 1.5,
+     "claim_rule": "251 test(s) already on this job's ledger were not re-executed \u2014 paid once, in this job"
+    }
+   ]
+  },
+  "express-clean": {
+   "job_id": "express-clean",
+   "total_ms": 0,
+   "total_s": 0.0,
+   "suites": 0,
+   "by_kind": [],
+   "latest_basis": null,
+   "entries": []
+  }
+ },
+ "facts": {
+  "capture_overhead": [
+   {
+    "repo": "markdown",
+    "tests": 1129,
+    "record_s": 1.228,
+    "record_pct": 26.94,
+    "plain_s": 0.9673999999999999,
+    "capture_s": 1.021,
+    "collection_naive_s": 0.147,
+    "hh_startup_s": 0.125,
+    "hh_exec_s": 0.878,
+    "hh_plan_ms": 18.9,
+    "plain_exec_s": null,
+    "capture_exec_s": null,
+    "overhead_exec_ms": null,
+    "overhead_pct_exec": null,
+    "overhead_ms": 53.5,
+    "overhead_pct": 5.53,
+    "self_metered_ms": 58.57,
+    "label": "full executor (plan+run); exec split measured"
+   },
+   {
+    "repo": "click",
+    "tests": 2287,
+    "record_s": 7.765,
+    "record_pct": 5.14,
+    "plain_s": 7.3855,
+    "capture_s": 7.374,
+    "collection_naive_s": 2.854,
+    "hh_startup_s": 2.446,
+    "hh_exec_s": 4.833,
+    "hh_plan_ms": 66.3,
+    "plain_exec_s": null,
+    "capture_exec_s": null,
+    "overhead_exec_ms": null,
+    "overhead_pct_exec": null,
+    "overhead_ms": -11.2,
+    "overhead_pct": -0.15,
+    "self_metered_ms": 124.816,
+    "label": "full executor (plan+run); exec split measured"
+   },
+   {
+    "repo": "express",
+    "tests": 1261,
+    "record_s": 4.277,
+    "record_pct": 5.41,
+    "plain_s": 4.0574,
+    "capture_s": 4.59,
+    "collection_naive_s": 0.42,
+    "hh_startup_s": 0.376,
+    "hh_exec_s": 4.05,
+    "hh_plan_ms": 35.4,
+    "plain_exec_s": null,
+    "capture_exec_s": null,
+    "overhead_exec_ms": null,
+    "overhead_pct_exec": null,
+    "overhead_ms": 533.0,
+    "overhead_pct": 13.14,
+    "self_metered_ms": 72.413,
+    "label": "full executor (plan+run); exec split measured"
+   },
+   {
+    "repo": "werkzeug",
+    "tests": 994,
+    "plain_s": 5.6573,
+    "capture_s": 5.649,
+    "collection_naive_s": 0.679,
+    "collection_hh_s": 0.647,
+    "plain_exec_s": 4.978,
+    "capture_exec_s": 5.002,
+    "overhead_exec_ms": 23.7,
+    "overhead_pct_exec": 0.5,
+    "overhead_ms": -8.3,
+    "overhead_pct": -0.1,
+    "ledger_rows": 1003
+   },
+   {
+    "repo": "urllib3",
+    "tests": 2048,
+    "plain_s": 11.5525,
+    "capture_s": 12.157,
+    "collection_naive_s": 1.738,
+    "collection_hh_s": 1.756,
+    "plain_exec_s": 9.815,
+    "capture_exec_s": 10.401,
+    "overhead_exec_ms": 586.5,
+    "overhead_pct_exec": 6.0,
+    "overhead_ms": 604.5,
+    "overhead_pct": 5.2,
+    "ledger_rows": 2074
+   }
+  ],
+  "hang_capture": {
+   "werkzeug": {
+    "naive_attempts": [
+     {
+      "policy": "naive-doubling",
+      "suite_id": "werkzeug",
+      "attempt": 1,
+      "budget_s": 30.0,
+      "outcome": "timeout",
+      "wall_ms": 30006.0,
+      "wasted_ms": 30006.0,
+      "overhead_ms": 0.0,
+      "scenario": "hang",
+      "arm": "naive"
+     },
+     {
+      "policy": "naive-doubling",
+      "suite_id": "werkzeug",
+      "attempt": 2,
+      "budget_s": 60.0,
+      "outcome": "timeout",
+      "wall_ms": 60009.6,
+      "wasted_ms": 60009.6,
+      "overhead_ms": 0.0,
+      "scenario": "hang",
+      "arm": "naive"
+     }
+    ],
+    "capture_attempts": [
+     {
+      "policy": "hh-capture",
+      "suite_id": "werkzeug",
+      "attempt": 1,
+      "budget_s": 30.0,
+      "outcome": "timeout",
+      "wall_ms": 30005.8,
+      "wasted_ms": 30005.8,
+      "overhead_ms": 0.0,
+      "scenario": "hang",
+      "arm": "hh-capture"
+     },
+     {
+      "policy": "hh-capture",
+      "suite_id": "werkzeug",
+      "attempt": 2,
+      "budget_s": 60.0,
+      "outcome": "timeout",
+      "wall_ms": 60005.1,
+      "wasted_ms": 60005.1,
+      "overhead_ms": 0.0,
+      "scenario": "hang",
+      "arm": "hh-capture"
+     },
+     {
+      "policy": "hh-capture",
+      "suite_id": "werkzeug",
+      "attempt": 3,
+      "budget_s": 120.0,
+      "outcome": "ok",
+      "wall_ms": 5331.6,
+      "wasted_ms": 0.0,
+      "overhead_ms": 0.0,
+      "scenario": "hang",
+      "arm": "hh-capture"
+     }
+    ],
+    "audits": [
+     {
+      "rows": 1004,
+      "start": 10,
+      "end": 994,
+      "open_intervals": [
+       "tests/test_zzhang.py::test_never_finishes"
+      ],
+      "status": {},
+      "attempt": 1
+     },
+     {
+      "rows": 1004,
+      "start": 10,
+      "end": 994,
+      "open_intervals": [
+       "tests/test_zzhang.py::test_never_finishes"
+      ],
+      "status": {},
+      "attempt": 2
+     },
+     {
+      "rows": 1003,
+      "start": 9,
+      "end": 994,
+      "open_intervals": [],
+      "status": {},
+      "attempt": 3
+     },
+     {
+      "rows": 1004,
+      "start": 10,
+      "end": 994,
+      "open_intervals": [
+       "tests/test_zzhang.py::test_never_finishes"
+      ],
+      "status": {},
+      "attempt": 1
+     },
+     {
+      "rows": 1004,
+      "start": 10,
+      "end": 994,
+      "open_intervals": [
+       "tests/test_zzhang.py::test_never_finishes"
+      ],
+      "status": {},
+      "attempt": 2
+     },
+     {
+      "rows": 1003,
+      "start": 9,
+      "end": 994,
+      "open_intervals": [],
+      "status": {},
+      "attempt": 3
+     }
+    ],
+    "hang_identified": "tests/test_zzhang.py::test_never_finishes"
+   }
+  }
+ },
+ "repos": {
+  "markdown": {
+   "display": "python-markdown",
+   "stars": "3.9k",
+   "clone": {
+    "url": "https://github.com/python-markdown/markdown.git",
+    "ref": "934c53e43774af0a24c566f4b484e4f46d2d2f0d",
+    "depth": null
+   },
+   "lane": "unittest_exec",
+   "runner": "unittest",
+   "notes": "Native recursive unittest discovery (no shim). Editable install is required because extension tests resolve markdown.extensions.* through installed entry points. 1,129 tests, 110 skips, ~0.7 s. Resume omitted: the suite finishes in <2 s, below the scenario's minimum kill point.",
+   "n_tests_expected": 1129
+  },
+  "click": {
+   "display": "click",
+   "stars": "16k",
+   "clone": {
+    "url": "https://github.com/pallets/click.git",
+    "ref": "2247b35ea1c47c727d7a06e51fa280e12a863ff6",
+    "depth": null
+   },
+   "lane": "pytest_exec",
+   "runner": "pytest",
+   "notes": "pytest addopts `-m 'not stress'` deselects 31,000 stress parametrizations; 2,287 tests execute. Collection of ~33k items costs ~2.4 s and is measured separately: shard budgets are execution budgets and the executor adds collection on top instead of charging it to tests.",
+   "n_tests_expected": 2287
+  },
+  "express": {
+   "display": "express",
+   "stars": "65k",
+   "clone": {
+    "url": "https://github.com/expressjs/express.git",
+    "ref": "0dee2c52c7c873498f8ed7d8ee4ddd0a04d3ada8",
+    "depth": null
+   },
+   "lane": "mocha_exec",
+   "runner": "node",
+   "notes": "Official suite: test/ plus nested test/acceptance/. hh's Mocha adapter is recursive and preloads the same require hook (HH_MOCHA_REQUIRE), so both arms run the same 1,261-test universe \u2014 the previous 108-test discovery gap is closed. ~4 s suite.",
+   "n_tests_expected": 1261
+  },
+  "werkzeug": {
+   "display": "werkzeug",
+   "stars": "6.7k",
+   "clone": {
+    "url": "https://github.com/pallets/werkzeug.git",
+    "ref": "665e760ca6325a348ce03e5cf780b17e4be01848",
+    "depth": null
+   },
+   "lane": "capture",
+   "runner": "pytest",
+   "notes": "`-m 'not dev_server'` (25 deselected) is required: the full suite blocks indefinitely in this sandbox. 994 terminal ledger rows = 992 passed + 2 skipped. Installed non-editable (markupsafe + test deps) and imports the repo via PYTHONPATH=src: an editable install of this repo would shadow the released Werkzeug that quart/flask need in the urllib3 capture environment. Capture-lane injected-hang scenario names the culprit from the open interval, then descopes and runs green.",
+   "n_tests_expected": 994
+  },
+  "urllib3": {
+   "display": "urllib3",
+   "stars": "3.9k",
+   "clone": {
+    "url": "https://github.com/urllib3/urllib3.git",
+    "ref": "a37bc93b65d6bcf00d3dc43d966bab6bd130ecd8",
+    "depth": null
+   },
+   "lane": "capture",
+   "runner": "pytest",
+   "notes": "`--ignore=test/with_dummyserver` in both arms (52 TLS/proxy failures in this sandbox). 2,048 tests; collection is measured separately from execution.",
+   "n_tests_expected": 2048
+  }
+ }
+}
