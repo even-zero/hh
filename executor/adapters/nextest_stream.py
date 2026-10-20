@@ -62,9 +62,12 @@ def nextest_bin() -> str:
 
 
 def _cargo_argv(tool: str, *args: str) -> list[str]:
-    """`cargo nextest …`, or a direct `cargo-nextest` binary if that is what HH_NEXTEST is."""
-    if os.path.basename(tool).startswith("cargo-nextest"):
-        return [tool, *args]
+    """`cargo nextest …`.
+
+    Both a `cargo` and a `cargo-nextest` binary take the subcommand name the
+    same way: cargo dispatches `cargo nextest run` to `cargo-nextest nextest
+    run`. Invoking `cargo-nextest run` directly is rejected.
+    """
     return [tool, "nextest", *args]
 
 
