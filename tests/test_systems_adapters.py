@@ -739,8 +739,11 @@ class TestRealTools(unittest.TestCase):
         ledger = os.path.join(tmp, "ledger.jsonl")
         res = call("nextest", "--root", tmp, "--ledger", ledger)
         self.assertEqual(res.returncode, 0, res.stderr)
-        self.assertEqual([r["status"] for r in ends(read_jsonl(ledger))],
-                         ["passed", "failed"])
+        # nextest runs tests in parallel: rows arrive in completion order
+        self.assertEqual(sorted((r["key"], r["status"])
+                                for r in ends(read_jsonl(ledger))),
+                         [("nextest::demo/tests/test_add", "passed"),
+                          ("nextest::demo/tests/test_fail", "failed")])
 
     @staticmethod
     def _has_nextest() -> bool:
