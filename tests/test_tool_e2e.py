@@ -93,7 +93,8 @@ class TestToolEndToEnd(unittest.TestCase):
         self.assertEqual(TOOL_SPEC["parameters"]["required"], ["root"])
         for p in ("root", "runner", "budget_s", "resume"):
             self.assertIn(p, props)
-        self.assertEqual(props["runner"]["enum"], ["unittest", "pytest", "node"])
+        self.assertEqual(props["runner"]["enum"],
+                         ["unittest", "pytest", "node", "junit"])
 
 
 @unittest.skipUnless(os.path.isdir(FIXTURE), "fixtures not shipped in this build")

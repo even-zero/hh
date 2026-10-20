@@ -39,4 +39,4 @@ include-package-data = true
 version = { attr = "hh.__version__" }
 
 [tool.setuptools.package-data]
-"hh.adapters" = ["*.cjs"]
+"hh.adapters" = ["*.cjs", "*.java"]

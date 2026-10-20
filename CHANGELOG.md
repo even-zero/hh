@@ -1,5 +1,21 @@
 # Changelog
 
+## 2.1.0 — 2026-10-20
+
+**Added**
+- `junit` runner: Java and Kotlin suites on the JUnit Platform (JUnit 5, JUnit 4
+  via Vintage) now get a record pass, a measured budget and resume-on-overrun
+  like every other runner. A small driver (`hh/adapters/HhJunit.java`) is
+  compiled once with `javac`; the project's test classpath is taken from
+  `HH_JUNIT_CLASSPATH`, Maven, or a console-standalone jar.
+
+**Fixed**
+- Skipped tests and ids that no longer resolve (both 0 ms rows) are kept out of
+  the duration aggregates. They used to drag the p90 down until a measured
+  budget killed the suite — the failure the tool exists to prevent.
+- Discovery child processes get hh's package directory on `PYTHONPATH`, so a
+  source checkout works whatever the caller's cwd is.
+
 ## 2.0.0 — 2026-10-20
 
 The product is now one number: the timeout a suite needs. Everything that

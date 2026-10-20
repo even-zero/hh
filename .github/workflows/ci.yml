@@ -52,6 +52,35 @@ jobs:
           python -m hh --store-root /tmp/hh-store report > /tmp/report.json
           python -c "import json; d = json.load(open('/tmp/report.json')); assert d['tests_tracked'] > 0, d"
 
+  junit:
+    name: junit (jdk 17)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      # The adapter compiles HhJunit.java with javac and needs the JUnit
+      # Platform on the test classpath; this job is what proves the Java side
+      # works, since the unit stub only covers the Python half.
+      - name: Fetch the JUnit Platform console launcher
+        run: |
+          curl -fsSL -o "$RUNNER_TEMP/junit-platform-console-standalone.jar" \
+            https://repo1.maven.org/maven2/org/junit/platform/junit-platform-console-standalone/1.11.4/junit-platform-console-standalone-1.11.4.jar
+
+      - name: Install test dependency
+        run: python -m pip install --quiet --disable-pip-version-check pytest
+
+      - name: Tests, with a real JUnit 5 suite
+        env:
+          HH_JUNIT_CLASSPATH: ${{ runner.temp }}/junit-platform-console-standalone.jar
+        run: python -m unittest discover -s tests -v
+
   package:
     name: wheel
     runs-on: ubuntu-latest

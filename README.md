@@ -39,8 +39,52 @@ hh run  --plan plan.json --root .                  # execute + record
 hh report                                          # what the store has measured
 ```
 
-`--runner` is one of `unittest`, `pytest`, `node` (Mocha). The store lives in
-`./.hh/` inside the suite root (gitignore it, or point `--store-root` elsewhere).
+`--runner` is one of `unittest`, `pytest`, `node` (Mocha) or `junit` (any test
+framework on the JUnit Platform — JUnit 5, JUnit 4 through Vintage, and Kotlin
+suites compiled against either). The store lives in `./.hh/` inside the suite
+root (gitignore it, or point `--store-root` elsewhere).
+
+## Java and Kotlin (JUnit)
+
+hh drives the JUnit Platform directly, so Java and Kotlin suites get the same
+treatment as the Python ones: a record pass, then a measured budget, and a
+resume that never re-pays a finished test.
+
+Two things are needed, because JUnit gives neither for free:
+
+- **a JDK**, not just a JRE — hh compiles a small driver
+  (`hh/adapters/HhJunit.java`) on first use and caches it in `.hh/junit/`;
+- **the project's test classpath** and **compiled test classes**. Build first
+  (`mvn test-compile`, `gradle testClasses`); hh looks in
+  `target/test-classes`, `build/classes/java/test`, `build/classes/kotlin/test`
+  and the usual siblings.
+
+The classpath is resolved in this order, and the error tells you which step
+failed:
+
+1. `HH_JUNIT_CLASSPATH` — used verbatim (path-separator separated). This is the
+   answer for Gradle projects:
+   `HH_JUNIT_CLASSPATH=$(./gradlew -q printTestClasspath)` or your IDE's test
+   classpath, including the JUnit jars.
+2. `mvn dependency:build-classpath` when `pom.xml` and `mvn` are present
+   (cached next to the compiled driver).
+3. a `junit-platform-console-standalone-*.jar` somewhere in the project.
+
+```bash
+hh --store-root . plan --root . --runner junit --out plan.json
+hh --store-root . run  --plan plan.json --root .          # records the suite
+hh --store-root . plan --root . --runner junit --out plan.json   # now measured
+```
+
+Identity: a Java test is `junit::com/example/FooTest/testAdd`, with invocations
+of a `@ParameterizedTest` tagged by an 8-hex parameter suffix. Unlike the Python
+runners, the class segment is kept — in Java the class *is* the file, so
+dropping it would merge every same-named method in a package.
+
+Limitation, stated rather than hidden: tests generated at runtime
+(`@TestFactory` dynamic tests) are recorded on the run that produces them, but
+a later resumed run cannot address them one by one; hh reports them as
+`unresolved` and keeps their previous measurements.
 
 ## What each call returns
 
@@ -58,8 +102,9 @@ hh report                                          # what the store has measured
 
 ## How the budget is computed
 
-1. The suite is enumerated (pytest `--collect-only`, unittest import, Mocha load),
-   never executed, and the manifest is cached by tree fingerprint.
+1. The suite is enumerated (pytest `--collect-only`, unittest import, Mocha load,
+   JUnit Platform discovery), never executed, and the manifest is cached by tree
+   fingerprint.
 2. Every test gets a point estimate: its own measured rows if it has any
    (median/EWMA blend), else its file's mean, else the suite mean.
 3. The suite total is a p50/p90/p99 over those distributions — Monte-Carlo below
@@ -75,6 +120,9 @@ A cold store has no rows, so step 2 has nothing to work with: the tool says so
   `operating_level: "record"` and a null prediction.
 - **A wrong budget costs one budget, not the suite.** Finished tests are in the
   ledger; an overrun resumes from the last unfinished test.
+- **Only tests that ran count.** Skipped tests and ids that no longer resolve
+  are recorded but kept out of the duration aggregates: a 0 ms row would drag
+  the p90 down until the budget killed the suite.
 - **hh cannot beat a correct guess** on test work. If the suite already fits
   your timeout, hh costs its ledger and nothing else. (It can still be faster
   overall when the naive command goes through a wrapper such as `npm test`:
@@ -93,7 +141,8 @@ hh/
   executor.py    run under the budget; resume on overrun
   store.py       SQLite: runs, observations, aggregates
   keys.py        stable test identities
-  adapters/      unittest, pytest, Mocha (live ledger + discovery)
+  adapters/      unittest, pytest, Mocha, JUnit (ledger + discovery);
+                 HhJunit.java is the JUnit platform driver
 benchmark/       ten repos, one metric (see benchmark/README.md)
 tests/           unit + end-to-end tests
 ```
@@ -107,8 +156,9 @@ python3 -m benchmark setup && python3 -m benchmark run     # the benchmark
 ```
 
 CI (`.github/workflows/ci.yml`) runs the tests on Python 3.10 and 3.13, smokes
-the CLI on `fixtures/synth_tiny_7`, and installs the built wheel into a clean
-venv. The benchmark is not in CI: it clones ten repositories and takes minutes.
+the CLI on `fixtures/synth_tiny_7`, installs the built wheel into a clean venv,
+and runs the JUnit adapter against a real JUnit 5 suite with a JDK. The
+benchmark is not in CI: it clones ten repositories and takes minutes.
 
 ## License
 

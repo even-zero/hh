@@ -66,7 +66,9 @@ There is no sharding, no worker pool, no hang quarantine, no escalation ladder.
 ## 5. Identity
 
 A test's key is `runner::file::class.name` (see `hh/keys.py`), with a
-collision suffix for inherited/parametrised methods. The same normalisation is
+collision suffix for inherited/parametrised methods. For `junit` the class
+segment is kept, because in Java the class is the file; for the Python runners
+it is dropped so a class rename cannot break identity. The same normalisation is
 used by discovery, the ledger plugin and the store, so a recorded row, a plan
 entry and a re-run target all name the same test.
 
@@ -85,9 +87,17 @@ Censored rows (killed at a budget) are kept and counted as lower bounds.
 | pytest | `--collect-only` in a child process | `pytest_plugin` (start/end rows, watchdog start rows) |
 | unittest | import + enumerate (`unittest.defaultTestLoader`) | `unittest_stream.LedgerResult` |
 | Mocha | load files in a child, print `{key, raw_id}` | `mocha_stream.cjs` (run mode) |
+| JUnit | JUnit Platform launcher over the compiled test classes | `HhJunit.java` (compiled once with `javac`, run per attempt) |
 
-All three skip tests already present in the ledger, so a resumed run — record
+All four skip tests already present in the ledger, so a resumed run — record
 pass or measured — never re-pays finished work.
+
+The JUnit adapter needs the project's test classpath and a JDK, and it uses the
+same three fallbacks documented in README.md (`HH_JUNIT_CLASSPATH`, Maven, a
+console-standalone jar). Its ledger rows and its key derivation are pinned to
+`hh/keys.py` by a check in the adapter: if the Java driver and Python disagree
+about a single id, discovery fails with that id in the message instead of
+letting the next run silently fail to find its tests.
 
 ## 8. Non-goals (removed on purpose)
 

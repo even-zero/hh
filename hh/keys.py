@@ -19,6 +19,11 @@ def normalize(runner: str, raw_id: str) -> str:
 
     unittest id:  test_s001.TestS001.test_t000        -> unittest::test_s001/test_t000
     pytest nodeid: tests/a/test_b.py::C::test_x[p-1]  -> pytest::tests/a/test_b/test_x :: p|1
+    junit id:     com.example.FooTest.testAdd[#1]     -> junit::com/example/FooTest/testAdd :: <hash>
+
+    In Java the class *is* the file, so its segment is kept; dropping it (the
+    unittest/pytest rule below, where a class rename must not break identity)
+    would collapse every same-named method in a package into one key.
     """
     raw = raw_id.strip()
     params = ""
@@ -31,7 +36,8 @@ def normalize(runner: str, raw_id: str) -> str:
     parts = raw.split("/")
     # drop class-level segment (unittest Class.method, pytest ::Class::test_x):
     # class renames must not break identity — that is what fuzzy tiers are for
-    if len(parts) >= 3 and (parts[-2][:1].isupper() or parts[-2] == parts[-3]):
+    if (runner != "junit" and len(parts) >= 3
+            and (parts[-2][:1].isupper() or parts[-2] == parts[-3])):
         parts.pop(-2)
     key = f"{runner}::{'/'.join(parts)}"
     if params:
