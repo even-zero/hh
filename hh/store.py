@@ -165,8 +165,13 @@ class Store:
         every key is touched, so it costs the same queries plus a large IN(...)
         list and is no faster (70 ms vs 41 ms at 9 k rows). Keep the one pass.
         """
+        # Only work that actually ran counts towards a duration. A skipped test
+        # and an id that no longer resolves both produce a 0 ms row; letting
+        # them into the aggregate would drag the p90 down until a measured
+        # budget kills the suite — the exact failure this tool exists to stop.
         rows = self.db.execute(
             "SELECT test_key, file_path, duration_ms, censored, ts FROM observations"
+            " WHERE status NOT IN ('skipped', 'unresolved')"
             " ORDER BY ts"
         ).fetchall()
         by_test: dict[str, list[tuple[float, int]]] = {}

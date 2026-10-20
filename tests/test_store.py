@@ -52,6 +52,23 @@ class TestIngest(unittest.TestCase):
         rows = self.store.db.execute("SELECT COUNT(*) FROM observations").fetchone()[0]
         self.assertEqual(rows, 2, "resumed runs must not re-ingest the same rows")
 
+    def test_skipped_and_unresolved_rows_do_not_lower_the_budget(self):
+        """A skipped test is 0 ms of work; so is an id that no longer exists.
+
+        If either reached the aggregates, the p90 would sink towards zero and a
+        measured budget would start killing the suite.
+        """
+        self._append(end_row("junit::com/example/FooTest/testAdd", 40.0),
+                     end_row("junit::com/example/FooTest/testAdd", 44.0),
+                     end_row("junit::com/example/FooTest/testSlow", 0.0, status="skipped"),
+                     end_row("junit::com/example/FooTest/testGone", 0.0,
+                             status="unresolved"))
+        self.store.ingest_ledger(self.ledger, self.run_id, self.ctx, "junit")
+        self.store.refresh_aggregates()
+        agg = self.store.agg_map("test")
+        self.assertEqual(set(agg), {"junit::com/example/FooTest/testAdd"})
+        self.assertGreaterEqual(agg["junit::com/example/FooTest/testAdd"]["p50"], 40.0)
+
     def test_censoring_is_preserved(self):
         self._append(end_row("unittest::a/hang", 2000.0, status="timeout").replace(
             '"censored": false', '"censored": true'))

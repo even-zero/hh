@@ -23,7 +23,7 @@ from . import estimator, policy, store as store_mod
 from .keys import unique_key_map
 from .meter import Meter
 
-RUNNERS = ("unittest", "pytest", "node")
+RUNNERS = ("unittest", "pytest", "node", "junit")
 
 TOOL_SPEC = {
     "name": "run_tests",
@@ -59,7 +59,10 @@ def _tree_fingerprint(root: str, runner: str) -> str:
     import hashlib
     h = hashlib.sha1()
     h.update(runner.encode())
-    exts = (".py",) if runner != "node" else (".js", ".cjs", ".mjs", ".json")
+    exts = {
+        "node": (".js", ".cjs", ".mjs", ".json"),
+        "junit": (".java", ".kt", ".kts", ".class", ".xml"),
+    }.get(runner, (".py",))
     for dirpath, dirnames, filenames in os.walk(root):
         dirnames[:] = sorted(d for d in dirnames
                              if d not in SKIP_DIRS and not d.startswith("."))
@@ -100,6 +103,13 @@ def collect_manifest(root: str, runner: str, meter: Meter,
         except (OSError, ValueError, KeyError):
             pass
 
+    # The adapter runs in a child process; make sure it can import hh when the
+    # tool itself is being used from a source checkout rather than a wheel.
+    child_env = dict(os.environ)
+    pkg_parent = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    child_env["PYTHONPATH"] = os.pathsep.join(
+        [pkg_parent, child_env.get("PYTHONPATH", "")]).rstrip(os.pathsep)
+
     raw_ids: list[str] = []
     with meter.span("collect"):
         if runner == "pytest":
@@ -108,12 +118,25 @@ def collect_manifest(root: str, runner: str, meter: Meter,
                 proc = subprocess.run(
                     [sys.executable, "-m", "hh.adapters.pytest_stream",
                      "--root", root_abs, "--collect-out", out],
-                    capture_output=True, text=True)
+                    capture_output=True, text=True, env=child_env)
                 if proc.returncode not in (0, 5) or not os.path.exists(out):
                     raise RuntimeError("pytest collection failed: "
                                        + (proc.stdout + proc.stderr)[-2000:])
                 with open(out, encoding="utf-8") as f:
                     raw_ids = [json.loads(line) for line in f]
+        elif runner == "junit":
+            with tempfile.TemporaryDirectory(prefix="hh-collect-") as tmp:
+                out = os.path.join(tmp, "junit-ids.jsonl")
+                proc = subprocess.run(
+                    [sys.executable, "-m", "hh.adapters.junit_stream",
+                     "--root", root_abs, "--collect-out", out],
+                    capture_output=True, text=True, env=child_env)
+                if proc.returncode != 0 or not os.path.exists(out):
+                    raise RuntimeError("JUnit collection failed: "
+                                       + (proc.stdout + proc.stderr)[-2000:])
+                with open(out, encoding="utf-8") as f:
+                    raw_ids = [json.loads(line)["raw_id"]
+                               for line in f if line.strip()]
         elif runner == "node":
             script = os.path.join(os.path.dirname(__file__), "adapters", "mocha_stream.cjs")
             proc = subprocess.run(["node", script, "collect", root_abs],
@@ -228,7 +251,8 @@ def execute_plan(plan: dict, root: str, runner: str = "unittest",
     st = store_mod.Store(store_root)
     adapter = {"unittest": "hh.adapters.unittest_stream",
                "pytest": "hh.adapters.pytest_stream",
-               "node": "hh.adapters.mocha_stream"}[runner]
+               "node": "hh.adapters.mocha_stream",
+               "junit": "hh.adapters.junit_stream"}[runner]
     ledger = os.path.join(plan["checkpoint_dir"], "ledger.jsonl")
     before = done_map(ledger)
     stats = execute(plan, os.path.abspath(root), adapter=adapter, log=log)
