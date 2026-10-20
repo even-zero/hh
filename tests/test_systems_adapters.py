@@ -32,6 +32,18 @@ from executor.adapters import (ctest_stream, go_stream, nextest_stream,  # noqa:
 
 SYSTEMS = ["go", "nextest", "rspec", "phpunit", "ctest"]
 
+# Real toolchains are opt-in. The plain test job runs on a runner image that
+# happens to ship some of these tools (an old phpunit, for one), and sniffing
+# PATH there made the suite depend on the image rather than on the code. CI sets
+# HH_REAL_TOOLS=1 in the `systems` job, which installs all five and fails if any
+# real-tool test skips.
+REAL_TOOLS = os.environ.get("HH_REAL_TOOLS") == "1"
+
+
+def real_tool(name: str):
+    """The real binary, or None when this run is not testing real toolchains."""
+    return shutil.which(name) if REAL_TOOLS else None
+
 
 def write(path: str, text: str) -> str:
     os.makedirs(os.path.dirname(path), exist_ok=True)
@@ -212,50 +224,82 @@ sys.exit(1)
 
 
 class TestNextestParsers(unittest.TestCase):
-    DICT_DOC = {"rust-suites": {
-        "demo::tests": {"package-name": "demo", "binary-id": "demo::tests",
-                        "testcases": {"test_add": {"ignored": False},
-                                      "test_ignored": {"ignored": True}}},
-        "demo::lib": {"testcases": {"lib_test": {}}},
-    }}
-    LIST_DOC = {"rust-suites": [
-        {"binary-id": "demo::tests", "testcases": [{"name": "test_add"}]},
-        {"binary-id": "demo::lib", "testcases": {"lib_test": {"ignored": False},
-                                                 "skipped": {"ignored": True}}},
-    ]}
+    # `cargo nextest list --message-format json`: nextest-metadata's
+    # TestListSummary, keyed by binary id (RustBinaryId: the package name for a
+    # lib, "package::target" for an integration test).
+    DOC = {"test-count": 3, "rust-build-meta": {"target-directory": "target"},
+           "rust-suites": {
+               "demo": {"package-name": "demo", "binary-name": "demo",
+                        "binary-id": "demo", "kind": "lib",
+                        "testcases": {"tests::test_add": {"ignored": False},
+                                      "tests::test_ignored": {"ignored": True}}},
+               "demo::it": {"package-name": "demo", "binary-name": "it",
+                            "binary-id": "demo::it", "kind": "test",
+                            "testcases": {"works": {}}},
+               "demo::bench/b": {"package-name": "demo", "binary-name": "b",
+                                 "binary-id": "demo::bench/b", "kind": "bench",
+                                 "status": "skipped", "testcases": {"x": {}}},
+           }}
 
-    def test_both_list_schemas(self):
-        self.assertEqual(nextest_stream.parse_list(self.DICT_DOC), [
-            ("demo::tests", "test_add"), ("demo::lib", "lib_test")])
-        self.assertEqual(nextest_stream.parse_list(self.LIST_DOC), [
-            ("demo::tests", "test_add"), ("demo::lib", "lib_test")])
+    def test_list_skips_ignored_and_skipped_suites(self):
+        self.assertEqual(sorted(nextest_stream.parse_list(self.DOC)), [
+            ("demo", "tests::test_add"), ("demo::it", "works")])
+
+    def test_suite_metadata_is_kept_for_the_event_names(self):
+        suites = {s["binary_id"]: s for s in nextest_stream.parse_suites(self.DOC)}
+        self.assertEqual((suites["demo"]["package"], suites["demo"]["binary"]),
+                         ("demo", "demo"))
+        self.assertEqual(suites["demo::it"]["binary"], "it")
 
     def test_unknown_schema_says_what_it_saw(self):
         with self.assertRaises(RuntimeError) as ctx:
             nextest_stream.parse_list({"whatever": 1})
         self.assertIn("whatever", str(ctx.exception))
 
-    def test_raw_and_key_round_trip(self):
-        raw = nextest_stream.raw_for("demo::tests", "mod::test_add")
-        self.assertEqual(nextest_stream.split_raw(raw), ("demo::tests", "mod::test_add"))
-        self.assertEqual(nextest_stream.key_for("demo::tests", "mod::test_add"),
-                         "nextest::demo/tests/mod::test_add")
+    def test_raw_and_key(self):
+        raw = nextest_stream.raw_for("demo::it", "mod::works")
+        self.assertEqual(nextest_stream.split_raw(raw), ("demo::it", "mod::works"))
+        self.assertEqual(nextest_stream.key_for("demo::it", "mod::works"),
+                         "nextest::demo/it/mod/works")
+        # the module path is the nearest useful aggregate for a Rust test
+        self.assertEqual(keys.file_of("nextest::demo/it/mod/works"), "demo/it/mod")
 
-    def test_filter_expression(self):
-        expr = nextest_stream._filter_expression([("demo::tests", "a"),
-                                                  ("demo::lib", "b")])
-        self.assertEqual(expr, 'binary_id(="demo::tests") & test(="a") | '
-                               'binary_id(="demo::lib") & test(="b")')
+    def test_filter_expression_is_grouped(self):
+        expr = nextest_stream._filter_expression([("demo::it", "a"), ("demo", "b")])
+        self.assertEqual(expr, '(binary_id(="demo::it") & test(="a")) | '
+                               '(binary_id(="demo") & test(="b"))')
 
-    def test_events_of_both_eras(self):
-        modern = {"type": "test-passed", "name": "a", "binary-id": "d::t", "running": 0.5}
-        legacy = {"type": "test", "event": "ok", "name": "a", "binary-id": "d::t"}
-        for ev in (modern, legacy):
-            self.assertEqual(nextest_stream._event_test(ev), ("d::t", "a"))
-            self.assertEqual(nextest_stream._verdict(ev), "passed")
-        self.assertIsNone(nextest_stream._event_test({"type": "run-finished"}))
-        self.assertIsNone(nextest_stream._event_test(
-            {"type": "test-retry-passed", "name": "a"}))
+    def test_large_resumes_are_split_into_several_runs(self):
+        targets = [("demo", "tests::t%04d" % i) for i in range(4000)]
+        groups = nextest_stream._groups(targets)
+        self.assertGreater(len(groups), 1)
+        self.assertEqual(sum(len(g) for g in groups), len(targets))
+        for group in groups:
+            self.assertLessEqual(len(nextest_stream._filter_expression(group)),
+                                 nextest_stream.MAX_FILTER_CHARS + 100)
+
+    def test_events_are_libtest_lines(self):
+        # nextest emits libtest-compatible JSON for `--message-format json`:
+        # {"type":"test","event":"ok","name":"<package>::<binary>$<test>"}
+        self.assertEqual(nextest_stream.parse_event(
+            {"type": "test", "event": "ok", "name": "a"}), ("ok", "a"))
+        self.assertEqual(nextest_stream.parse_event(
+            {"type": "test", "event": "started", "name": "a"}), ("started", "a"))
+        self.assertIsNone(nextest_stream.parse_event({"type": "suite", "event": "ok"}))
+        self.assertIsNone(nextest_stream.parse_event({"type": "test", "event": "?"}))
+
+    def test_event_names_map_back_to_list_ids(self):
+        identity = nextest_stream.Identity(nextest_stream.parse_suites(self.DOC))
+        self.assertEqual(identity.resolve("demo::demo$tests::test_add"),
+                         (("demo", "tests::test_add"), "tests::test_add"))
+        self.assertEqual(identity.resolve("demo::it$works"),
+                         (("demo::it", "works"), "works"))
+        # stress and retry suffixes are decoration, not part of the name
+        self.assertEqual(identity.resolve("demo::demo@stress-2$tests::test_add#3"),
+                         (("demo", "tests::test_add"), "tests::test_add"))
+        # older nextest printed the bare test name; unambiguous ones still map
+        self.assertEqual(identity.resolve("works"), (("demo::it", "works"), "works"))
+        self.assertIsNone(identity.resolve("tests::not_listed")[0])
 
 
 class TestNextestWithFakeTool(unittest.TestCase):
@@ -263,19 +307,25 @@ class TestNextestWithFakeTool(unittest.TestCase):
 import json, sys
 args = sys.argv[1:]
 if "list" in args:
-    print(json.dumps({"rust-suites": {"demo::tests": {"testcases": {
-        "test_add": {"ignored": False}, "test_ignored": {"ignored": True},
-        "test_fail": {"ignored": False}}}}}))
+    print(json.dumps({"test-count": 3, "rust-suites": {
+        "demo": {"package-name": "demo", "binary-name": "demo", "binary-id": "demo",
+                 "kind": "lib",
+                 "testcases": {"tests::test_add": {"ignored": False},
+                               "tests::test_ignored": {"ignored": True},
+                               "tests::test_fail": {"ignored": False}}}}}))
     sys.exit(0)
+if "-E" in args:
+    open(%(argv)r, "w").write(" ".join(args))
 for ev in (
-    {"type": "run-started", "test-count": 2},
-    {"type": "test-started", "name": "test_add", "binary-id": "demo::tests"},
-    {"type": "test-passed", "name": "test_add", "binary-id": "demo::tests",
-     "running": 0.02},
-    {"type": "test-started", "name": "test_fail", "binary-id": "demo::tests"},
-    {"type": "test-failed", "name": "test_fail", "binary-id": "demo::tests",
-     "running": 0.03},
-    {"type": "run-finished", "passed": 1, "failed": 1},
+    {"type": "suite", "event": "started", "test_count": 2},
+    {"type": "test", "event": "started", "name": "demo::demo$tests::test_add"},
+    {"type": "test", "event": "ok", "name": "demo::demo$tests::test_add",
+     "exec_time": 0.02},
+    {"type": "test", "event": "started", "name": "demo::demo$tests::test_fail"},
+    {"type": "test", "event": "failed", "name": "demo::demo$tests::test_fail",
+     "exec_time": 0.03, "stdout": "boom"},
+    {"type": "suite", "event": "failed", "passed": 1, "failed": 1, "ignored": 0,
+     "measured": 0, "filtered_out": 0, "exec_time": 0.05},
 ):
     print(json.dumps(ev))
 sys.exit(100)
@@ -286,7 +336,9 @@ sys.exit(100)
         self.addCleanup(shutil.rmtree, self.tmp, True)
         self.root = os.path.join(self.tmp, "repo")
         write(os.path.join(self.root, "Cargo.toml"), "[package]\nname='demo'\n")
-        self.cargo = write_tool(os.path.join(self.tmp, "bin", "cargo"), self.FAKE)
+        self.argv_log = os.path.join(self.tmp, "argv.txt")
+        self.cargo = write_tool(os.path.join(self.tmp, "bin", "cargo"),
+                                self.FAKE % {"argv": self.argv_log})
         self.ids = os.path.join(self.tmp, "ids.jsonl")
 
     def test_collect_skips_ignored(self):
@@ -301,12 +353,44 @@ sys.exit(100)
         ledger = os.path.join(self.tmp, "ledger.jsonl")
         res = call("nextest", "--root", self.root, "--ledger", ledger,
                    env={"HH_NEXTEST": self.cargo})
+        # exit 100 means "tests failed"; that is data, not an adapter error
         self.assertEqual(res.returncode, 0, res.stderr)
         rows = read_jsonl(ledger)
         self.assertEqual([(r["raw_id"], r["status"]) for r in ends(rows)],
-                         [("demo::tests||test_add", "passed"),
-                          ("demo::tests||test_fail", "failed")])
+                         [("demo||tests::test_add", "passed"),
+                          ("demo||tests::test_fail", "failed")])
         self.assertEqual(rows[-1]["tests"], 2)
+
+    def test_a_finished_ledger_runs_nothing(self):
+        ledger = os.path.join(self.tmp, "ledger.jsonl")
+        env = {"HH_NEXTEST": self.cargo}
+        call("nextest", "--root", self.root, "--ledger", ledger, env=env)
+        before = read_jsonl(ledger)
+        res = call("nextest", "--root", self.root, "--ledger", ledger, env=env)
+        self.assertEqual(res.returncode, 0, res.stderr)
+        rows = read_jsonl(ledger)
+        self.assertEqual([r for r in rows if r["type"] == "end"],
+                         [r for r in before if r["type"] == "end"])
+        self.assertEqual(rows[-1]["type"], "suite_end")
+        self.assertEqual(rows[-1]["tests"], 0)
+
+    def test_a_selection_narrows_the_run(self):
+        ledger = os.path.join(self.tmp, "ledger.jsonl")
+        sel = os.path.join(self.tmp, "selection.jsonl")
+        write(sel, json.dumps({"raw_id": "demo||tests::test_add",
+                               "key": "nextest::demo/tests/test_add"}) + "\n")
+        res = call("nextest", "--root", self.root, "--ledger", ledger,
+                   "--tests-file", sel,
+                   env={"HH_NEXTEST": self.cargo})
+        self.assertEqual(res.returncode, 0, res.stderr)
+        with open(self.argv_log, encoding="utf-8") as f:
+            argv = f.read()
+        self.assertIn("-E", argv)
+        self.assertIn('binary_id(="demo") & test(="tests::test_add")', argv)
+        self.assertNotIn("test_fail", argv)
+        rows = read_jsonl(ledger)
+        self.assertEqual([r["key"] for r in ends(rows)],
+                         ["nextest::demo/tests/test_add"])
 
 
 class TestRspecParsers(unittest.TestCase):
@@ -509,7 +593,7 @@ set_tests_properties(disabled_d PROPERTIES DISABLED TRUE)
 """
 
     def setUp(self):
-        if not (shutil.which("cmake") and shutil.which("ctest")):
+        if not (real_tool("cmake") and real_tool("ctest")):
             self.skipTest("needs cmake and ctest")
         self.tmp = tempfile.mkdtemp(prefix="hh-ctest-")
         self.addCleanup(shutil.rmtree, self.tmp, True)
@@ -551,7 +635,7 @@ class TestRealTools(unittest.TestCase):
     """Small real suites, when the toolchain is installed (CI installs them all)."""
 
     def test_go(self):
-        go = shutil.which("go")
+        go = real_tool("go")
         if not go:
             self.skipTest("needs the Go toolchain")
         tmp = tempfile.mkdtemp(prefix="hh-go-real-")
@@ -575,7 +659,7 @@ class TestRealTools(unittest.TestCase):
                           ("example.com/m::TestFail", "failed")])
 
     def test_rspec(self):
-        if not shutil.which("rspec"):
+        if not real_tool("rspec"):
             self.skipTest("needs rspec")
         tmp = tempfile.mkdtemp(prefix="hh-rspec-real-")
         self.addCleanup(shutil.rmtree, tmp, True)
@@ -599,11 +683,21 @@ class TestRealTools(unittest.TestCase):
         self.assertEqual([r["status"] for r in rows], ["passed", "failed"])
 
     def test_phpunit(self):
-        if not shutil.which("phpunit"):
+        if not real_tool("phpunit"):
             self.skipTest("needs phpunit")
         tmp = tempfile.mkdtemp(prefix="hh-php-real-")
         self.addCleanup(shutil.rmtree, tmp, True)
-        write(os.path.join(tmp, "CalcTest.php"),
+        # PHPUnit 11 needs a configuration file to find a suite; that is what
+        # a real project has, and it keeps the test about the adapter.
+        write(os.path.join(tmp, "phpunit.xml"),
+              "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
+              "<phpunit xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\"\n"
+              "         xsi:noNamespaceSchemaLocation=\"phpunit.xsd\">\n"
+              "  <testsuites>\n"
+              "    <testsuite name=\"default\"><directory>tests</directory></testsuite>\n"
+              "  </testsuites>\n"
+              "</phpunit>\n")
+        write(os.path.join(tmp, "tests", "CalcTest.php"),
               "<?php\nuse PHPUnit\\Framework\\TestCase;\n"
               "final class CalcTest extends TestCase {\n"
               "  public function testAdd(): void { $this->assertSame(2, 1 + 1); }\n"
@@ -621,8 +715,8 @@ class TestRealTools(unittest.TestCase):
                          ["passed", "failed"])
 
     def test_nextest(self):
-        if not (shutil.which("cargo") and
-                (shutil.which("cargo-nextest") or self._has_nextest())):
+        if not (real_tool("cargo") and
+                (real_tool("cargo-nextest") or self._has_nextest())):
             self.skipTest("needs cargo-nextest")
         tmp = tempfile.mkdtemp(prefix="hh-nextest-real-")
         self.addCleanup(shutil.rmtree, tmp, True)
@@ -637,8 +731,8 @@ class TestRealTools(unittest.TestCase):
         res = call("nextest", "--root", tmp, "--collect-out", ids)
         self.assertEqual(res.returncode, 0, res.stderr)
         self.assertEqual([r["key"] for r in read_jsonl(ids)],
-                         ["nextest::demo/lib/tests/test_add",
-                          "nextest::demo/lib/tests/test_fail"])
+                         ["nextest::demo/tests/test_add",
+                          "nextest::demo/tests/test_fail"])
         ledger = os.path.join(tmp, "ledger.jsonl")
         res = call("nextest", "--root", tmp, "--ledger", ledger)
         self.assertEqual(res.returncode, 0, res.stderr)

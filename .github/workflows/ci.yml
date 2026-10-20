@@ -44,7 +44,10 @@ jobs:
           status=$?
           if [ "$status" -ne 0 ]; then
             # The job log is not always reachable from outside; annotations are.
-            tail -n 12 /tmp/tests.log | while IFS= read -r line; do
+            { grep -E "^(FAIL|ERROR):" -A 6 /tmp/tests.log | head -n 40
+              grep -E "^(Ran |OK|FAILED)" /tmp/tests.log | tail -n 3
+              tail -n 6 /tmp/tests.log
+            } 2>/dev/null | while IFS= read -r line; do
               line="${line//$'\r'/}"
               line="${line//'%'/'%25'}"
               echo "::error::$line"
@@ -144,7 +147,10 @@ jobs:
           python -m unittest discover -s tests -v > /tmp/tests.log 2>&1
           status=$?
           if [ "$status" -ne 0 ]; then
-            tail -n 12 /tmp/tests.log | while IFS= read -r line; do
+            { grep -E "^(FAIL|ERROR):" -A 6 /tmp/tests.log | head -n 40
+              grep -E "^(Ran |OK|FAILED)" /tmp/tests.log | tail -n 3
+              tail -n 6 /tmp/tests.log
+            } 2>/dev/null | while IFS= read -r line; do
               line="${line//$'\r'/}"
               line="${line//'%'/'%25'}"
               echo "::error::$line"
@@ -166,6 +172,11 @@ jobs:
   systems:
     name: systems adapters (go, rust, ruby, php, cmake)
     runs-on: ubuntu-latest
+    env:
+      # Real toolchains run here and only here. The plain test job must not
+      # change behaviour because the runner image happens to ship a tool
+      # (ubuntu-latest already has an old phpunit on PATH).
+      HH_REAL_TOOLS: "1"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -204,7 +215,10 @@ jobs:
           python -m unittest discover -s tests -v > /tmp/tests.log 2>&1
           status=$?
           if [ "$status" -ne 0 ]; then
-            tail -n 12 /tmp/tests.log | while IFS= read -r line; do
+            { grep -E "^(FAIL|ERROR):" -A 6 /tmp/tests.log | head -n 40
+              grep -E "^(Ran |OK|FAILED)" /tmp/tests.log | tail -n 3
+              tail -n 6 /tmp/tests.log
+            } 2>/dev/null | while IFS= read -r line; do
               line="${line//$'\r'/}"
               line="${line//'%'/'%25'}"
               echo "::error::$line"
@@ -214,13 +228,19 @@ jobs:
 
       - name: The systems adapter tests must run in this job
         run: |
+          status=0
           for reason in "needs the Go toolchain" "needs cargo-nextest" \
                         "needs rspec" "needs phpunit" "needs cmake and ctest"; do
             if grep -q "skipped '$reason" /tmp/tests.log; then
               echo "::error::a systems runner test was skipped: $reason"
-              exit 1
+              status=1
             fi
           done
+          if grep -qE '^OK \(skipped=[0-9]+\)' /tmp/tests.log; then
+            echo "::error::something in this job skipped; every test must run here"
+            status=1
+          fi
+          exit "$status"
 
   package:
     name: wheel
