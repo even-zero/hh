@@ -63,8 +63,8 @@ class TestRegistry(unittest.TestCase):
     def test_every_runner_has_exactly_one_adapter(self):
         self.assertEqual(
             list(registry.RUNNERS),
-            ["unittest", "pytest", "junit", "node", "jest", "vitest",
-             "node-test", "tap"])
+            ["unittest", "pytest", "junit", "go", "nextest", "rspec",
+             "phpunit", "ctest", "node", "jest", "vitest", "node-test", "tap"])
         scripts = [registry.node_script(r) for r in registry.NODE_ADAPTERS]
         self.assertEqual(len(scripts), len(set(scripts)))
         for runner in registry.RUNNERS:

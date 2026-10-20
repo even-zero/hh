@@ -163,6 +163,57 @@ jobs:
             exit 1
           fi
 
+  systems:
+    name: systems adapters (go, rust, ruby, php, cmake)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "stable"
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: taiki-e/install-action@nextest
+
+      # Every tool here is a real one: the tests drive `go test`, `cargo
+      # nextest`, `rspec`, `phpunit` and `ctest`, and one of them would
+      # silently pass as a fixture if the parser only ever saw our own output.
+      - name: Install rspec, PHP and PHPUnit
+        run: |
+          gem install rspec --no-document
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq php-cli php-xml php-mbstring
+          curl -fsSL -o /tmp/phpunit.phar https://phar.phpunit.de/phpunit-11.phar
+          sudo install -m 755 /tmp/phpunit.phar /usr/local/bin/phpunit
+          phpunit --version
+          rspec --version
+
+      - name: Tests, with real go / nextest / rspec / phpunit / ctest
+        run: |
+          set +e
+          python -m unittest discover -s tests -v > /tmp/tests.log 2>&1
+          status=$?
+          if [ "$status" -ne 0 ]; then
+            tail -n 12 /tmp/tests.log | while IFS= read -r line; do
+              line="${line//$'\r'/}"
+              line="${line//'%'/'%25'}"
+              echo "::error::$line"
+            done
+          fi
+          exit "$status"
+
+      - name: The systems adapter tests must run in this job
+        run: |
+          for reason in "needs the Go toolchain" "needs cargo-nextest" \
+                        "needs rspec" "needs phpunit" "needs cmake and ctest"; do
+            if grep -q "skipped '$reason" /tmp/tests.log; then
+              echo "::error::a systems runner test was skipped: $reason"
+              exit 1
+            fi
+          done
+
   package:
     name: wheel
     runs-on: ubuntu-latest
@@ -180,18 +231,25 @@ jobs:
           python -m venv /tmp/venv
           /tmp/venv/bin/pip install --quiet --disable-pip-version-check dist/*.whl
           /tmp/venv/bin/python -c "import executor, executor.tool, executor.adapters.unittest_stream; print(executor.__version__)"
-          # The JS adapters are package data, not Python modules: a wheel that
-          # forgot them would import fine and fail only at run time.
-          /tmp/venv/bin/python - <<'PY'
-          import os
-          from executor.adapters import registry
-          for runner in registry.NODE_ADAPTERS:
-              path = registry.node_script(runner)
-              assert os.path.exists(path), f"missing from the wheel: {path}"
-          print("js adapters present:", ", ".join(sorted(registry.NODE_ADAPTERS)))
-          PY
           /tmp/venv/bin/hh tool-spec | python -c "import json,sys; assert json.load(sys.stdin)['name'] == 'run_tests'"
           /tmp/venv/bin/hh --store-root /tmp/hh-wheel-store plan \
             --root "$GITHUB_WORKSPACE/fixtures/synth_tiny_7" --out /tmp/wheel-plan.json > /dev/null
           /tmp/venv/bin/hh --store-root /tmp/hh-wheel-store run \
             --plan /tmp/wheel-plan.json --root "$GITHUB_WORKSPACE/fixtures/synth_tiny_7" > /dev/null
+
+      - name: The wheel ships the adapters that are not Python modules
+        # The JS adapters and the RSpec formatter are package data: a wheel
+        # that forgot them would import fine and fail only at run time. Run
+        # from /tmp, because `python -c` puts the cwd (the source checkout)
+        # first on sys.path and would hide a missing wheel file.
+        working-directory: /tmp
+        run: |
+          /tmp/venv/bin/python - <<'PY'
+          import os
+          from executor.adapters import registry, rspec_stream
+          for runner in registry.NODE_ADAPTERS:
+              path = registry.node_script(runner)
+              assert os.path.exists(path), f"missing from the wheel: {path}"
+          assert os.path.exists(rspec_stream.FORMATTER), rspec_stream.FORMATTER
+          print("adapters present:", ", ".join(sorted(registry.RUNNERS)))
+          PY

@@ -119,7 +119,8 @@ class TestToolEndToEnd(unittest.TestCase):
         enum = props["runner"]["enum"]
         self.assertEqual(set(enum),
                          {"unittest", "pytest", "node", "junit",
-                          "jest", "vitest", "node-test", "tap"})
+                          "jest", "vitest", "node-test", "tap",
+                          "go", "nextest", "rspec", "phpunit", "ctest"})
         # The spec must be generated from the registry, not a second list.
         self.assertEqual(enum, list(registry.RUNNERS))
 
