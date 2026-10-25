@@ -1,0 +1,7 @@
+#!/bin/bash
+# javac wrapper: the Checker Framework's javac (com.sun.tools.javac) running on
+# the jdk4py runtime, compiling against the stub rt.jar as bootclasspath.
+TC=/home/user/toolchains/java-compiler
+exec /usr/local/lib/python3.11/dist-packages/jdk4py/java-runtime/bin/java \
+  -cp "$TC/javac.jar" com.sun.tools.javac.Main \
+  -bootclasspath "$TC/rt.jar" -source 8 -target 8 "$@"

@@ -1,0 +1,2 @@
+#!/bin/bash
+exec /usr/local/lib/python3.11/dist-packages/jdk4py/java-runtime/bin/java "$@"
