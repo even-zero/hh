@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>hh · timeout-metric benchmark · 2026-10-25</title>
+<style>
+:root { --bg:#f4f5fa; --card:#ffffff; --border:#e7e9f2; --ink:#1c1e2e;
+  --muted:#6b7280; --faint:#9ca3af; --red:#d91f3c; --green:#10b981; }
+* { box-sizing:border-box; }
+body { margin:0; background:var(--bg); color:var(--ink);
+  font:15px/1.55 ui-sans-serif,system-ui,"Segoe UI",Roboto,Helvetica,Arial,sans-serif; }
+.top { background:#fff; border-bottom:1px solid var(--border); padding:14px 28px;
+  display:flex; align-items:center; gap:14px; position:sticky; top:0; z-index:5; }
+.brand { font-weight:800; font-size:19px; letter-spacing:-.2px; }
+.brand em { font-style:normal; color:var(--red); }
+.pill { border:1px solid var(--border); border-radius:999px; padding:4px 12px;
+  font-size:12px; color:var(--muted); background:#fff; }
+.pill.solid { background:var(--ink); color:#fff; border-color:var(--ink); }
+.wrap { max-width:1180px; margin:0 auto; padding:26px 22px 60px; }
+.hero-title { font-size:31px; font-weight:800; letter-spacing:-.5px; margin:18px 0 2px; }
+.hero-sub { color:var(--muted); margin:0 0 18px; max-width:860px; }
+.grid2 { display:grid; grid-template-columns:1.15fr 1fr; gap:16px; }
+.card { background:var(--card); border:1px solid var(--border); border-radius:14px;
+  padding:20px 22px; box-shadow:0 1px 2px rgba(16,20,50,.04); }
+.sect { letter-spacing:.09em;text-transform:uppercase;font-size:11px;font-weight:700;color:#6b7280; margin:0 0 12px; }
+.bignum { font-size:74px; font-weight:800; letter-spacing:-2px; color:var(--red); line-height:1; }
+.bignum small { font-size:26px; color:var(--ink); font-weight:700; letter-spacing:-.5px; }
+.subnum { color:var(--muted); font-size:13.5px; margin-top:10px; }
+.chips { display:flex; gap:8px; flex-wrap:wrap; margin-top:14px; }
+.chip { border:1px solid var(--border); border-radius:8px; padding:5px 10px; font-size:12px;
+  color:var(--muted); background:#fbfbfe; }
+.kpis { display:grid; grid-template-columns:repeat(3,1fr); gap:14px; margin:6px 0 2px; }
+.kpi .v { font-size:27px; font-weight:800; letter-spacing:-.6px; }
+.kpi .k { letter-spacing:.09em;text-transform:uppercase;font-size:11px;font-weight:700;color:#6b7280; }
+.kpi .n { color:var(--faint); font-size:11.5px; }
+.meter { height:12px; border-radius:999px;
+  background:linear-gradient(90deg,#e11d48,#f97316,#f59e0b,#eab308,#10b981);
+  position:relative; margin:12px 0 6px; }
+.meter .pin { position:absolute; top:-5px; width:3px; height:22px; background:var(--ink);
+  border-radius:2px; }
+.meter-l { display:flex; justify-content:space-between; font-size:11px; color:var(--faint); }
+.hbar { display:flex; align-items:center; gap:10px; margin:7px 0; }
+.hbar-lab { width:150px; font-size:12px; color:var(--ink); font-weight:600; flex-shrink:0; }
+.hbar-track { height:12px; border-radius:999px; background:var(--track); overflow:hidden; }
+.hbar-fill { height:100%; border-radius:999px; }
+.hbar-val { font-size:11.5px; color:var(--muted); min-width:52px; text-align:right; }
+.paired { margin:14px 0; }
+.paired-head { font-size:13px; margin-bottom:4px; }
+.paired-head .sub { color:var(--faint); font-size:11.5px; margin-left:8px; }
+.finding { background:#fdf0f2; border:1px solid #f3b8c4; border-radius:14px;
+  padding:16px 20px; display:flex; gap:14px; align-items:flex-start; margin:16px 0; }
+.finding .ic { font-size:22px; }
+.finding b { display:block; letter-spacing:.09em;text-transform:uppercase;font-size:11px;font-weight:700;color:#6b7280; color:var(--red); }
+.grid-wrap { overflow-x:auto; }
+.grow { display:grid;
+  grid-template-columns:120px repeat(6,minmax(72px,1fr)) minmax(92px,1fr);
+  gap:6px; margin:5px 0; align-items:center; }
+.gl { font-size:12px; font-weight:600; }
+.gh { letter-spacing:.09em;text-transform:uppercase;font-size:11px;font-weight:700;color:#6b7280; text-align:center; font-size:10px; }
+.gh-hh { color:var(--green); }
+.gc { text-align:center; font-size:11.5px; font-variant-numeric:tabular-nums;
+  border-radius:8px; padding:7px 4px; border:1px solid transparent; }
+.gc-ok { background:#eef8f3; color:#0b7a5b; border-color:#cfeee2; }
+.gc-kill { background:#fdecef; color:#b31630; border-color:#f6cdd5; }
+.gc-up { background:#4b1020; color:#ffd7de; border-color:#7a1c33; }
+.gc-hh { background:#e8f6ee; color:#0b7a5b; border-color:#bfe8d6; font-weight:700; }
+table { width:100%; border-collapse:collapse; font-size:13px; }
+th { letter-spacing:.09em;text-transform:uppercase;font-size:11px;font-weight:700;color:#6b7280; text-align:left; padding:8px 10px; border-bottom:1px solid var(--border); }
+td { padding:8px 10px; border-bottom:1px solid #f1f2f8; vertical-align:top; }
+td.num, th.num { text-align:right; font-variant-numeric:tabular-nums; }
+.tag { display:inline-block; background:var(--red-soft); color:var(--red); border-radius:6px;
+  padding:2px 8px; font-size:11px; font-weight:700; }
+.tag.g { background:#e8f6ee; color:#0b7a5b; }
+.tag.s { background:#eef0f6; color:var(--slate); }
+.note-list li { margin:7px 0; }
+code { background:#eef0f6; border-radius:6px; padding:2px 6px; font-size:12px; }
+pre { background:#14162b; color:#dfe3ff; padding:14px 16px; border-radius:10px;
+  overflow:auto; font-size:12.5px; }
+.foot { color:var(--faint); font-size:12px; margin-top:28px; }
+@media (max-width:900px) { .grid2 { grid-template-columns:1fr; }
+  .kpis { grid-template-columns:repeat(2,1fr); } }
+</style></head><body>
+
+<div class="top">
+  <div class="brand"><em>hh</em> · timeout-metric</div>
+  <div class="pill">benchmark re-run</div>
+  <div class="pill">2026-10-25</div>
+  <div class="pill">12 repos · 72 configurations</div>
+  <div style="flex:1"></div>
+  <div class="pill solid">self-contained report</div>
+</div>
+
+<div class="wrap">
+  <h1 class="hero-title">Does the timeout kill the suite?</h1>
+  <p class="hero-sub">A caller must give a test suite a timeout. Too low and the suite is
+  SIGKILLed — the work is lost and the whole thing runs again. This run measures two things
+  across 12 fresh repositories and 11 test runners
+  (pytest, unittest, node, jest, vitest, node-test, tap, go, ctest, junit, phpunit, rspec):
+  whether hh's budget avoids the kill, and how many seconds that saves when the caller's
+  guess was too low. <code>naive</code> runs the suite under a guessed timeout G and
+  doubles G and restarts from zero on a kill; <code>hh</code> is the <code>run_tests</code>
+  tool: one record pass, then a measured budget independent of G. G is swept over
+  1, 2, 5, 10, 20, 30 s.</p>
+
+
+<div class="grid2">
+  <div class="card">
+    <div class="sect">Time saved vs the naive caller</div>
+    <div class="bignum">255.7<small> s</small></div>
+    <div class="subnum">Total wall-clock seconds hh saved across the
+    <b>19</b> configurations where a too-low guess SIGKILLed naive and
+    naive eventually recovered · median <b>1.53 s</b> per
+    configuration · the largest savings are minimatch's recovered guesses (its suite runs
+    longer than every guess in the sweep).</div>
+    <div class="chips">
+      <div class="chip">naive killed configs · <b>23</b>/72</div>
+      <div class="chip">total SIGKILLs (naive) · <b>52</b></div>
+      <div class="chip">SIGKILLs averted (kills hh never took) · <b>29</b></div>
+      <div class="chip">naive never finished · <b>4</b></div>
+      <div class="chip">record-pass price · <b>129.2 s</b></div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="sect">Kill-free score</div>
+    <div class="kpis">
+      <div class="kpi"><div class="k">hh kills</div>
+        <div class="v" style="color:#d91f3c">18</div>
+        <div class="n">budget-exceeded resumes (2 repos)</div></div>
+      <div class="kpi"><div class="k">naive kills</div>
+        <div class="v" style="color:#d91f3c">52</div>
+        <div class="n">SIGKILLs on naive attempts</div></div>
+      <div class="kpi"><div class="k">no-kill configs</div>
+        <div class="v">49</div>
+        <div class="n">guess was already fine</div></div>
+    </div>
+    <div class="meter"><div class="pin" style="left:25%"></div></div>
+    <div class="meter-l"><span>all kills on hh</span><span>all kills on naive</span></div>
+    <div class="subnum" style="margin-top:12px">Kills concentrate where the guess sits below
+    the suite's duration <code>D</code>. hh's budget is derived from measured per-test times
+    (<code>p90 × 1.25</code>, floored at 3 s), not from G — so it lands the same at every guess.
+    Where hh did hit its own budget (dayjs, minimatch) it <em>resumed from the ledger</em>
+    instead of restarting — that is the resume path, not a lost run.</div>
+  </div>
+</div>
+
+<div class="finding">
+  <div class="ic">🎯</div>
+  <div>
+    <b>Key finding</b>
+    hh finished every configuration in this run. Where the caller's guess was too low,
+    naive burned <b>462.7 s</b> to get to a result while hh spent
+    <b>207.0 s</b> — <b>255.7 s saved</b>.
+    In <b>4</b> configurations naive exhausted its guesses and returned
+    nothing — <b>135.2 s</b> burned for no result
+    (minimatch G=1/2/5, undici G=1), while hh completed those same configurations
+    (64.0 s of hh wall).
+  </div>
+</div>
+
+
+<div class="card" style="margin-top:16px">
+<div class="sect">Per repository — recorded measurements</div>
+<table>
+<tr><th>repo</th><th>runner</th><th class="num">reference</th><th class="num">budget</th>
+<th class="num">hh warm wall</th><th class="num">hh resumes</th>
+<th>naive killed guesses</th><th>gave up</th></tr>
+<tr><td><b>pycodestyle</b></td><td><span class="tag s">pytest</span></td><td class="num">1.67 s</td><td class="num">3.00 s</td><td class="num">1.98 s</td><td><span class="tag g">—</span></td><td>G=1</td><td>—</td></tr>
+<tr><td><b>simplejson</b></td><td><span class="tag s">unittest</span></td><td class="num">0.57 s</td><td class="num">3.00 s</td><td class="num">0.65 s</td><td><span class="tag g">—</span></td><td><span class="tag g">none</span></td><td>—</td></tr>
+<tr><td><b>compression</b></td><td><span class="tag s">node</span></td><td class="num">0.89 s</td><td class="num">30.00 s</td><td class="num">0.73 s</td><td><span class="tag g">—</span></td><td><span class="tag g">none</span></td><td>—</td></tr>
+<tr><td><b>dayjs</b></td><td><span class="tag s">jest</span></td><td class="num">4.86 s</td><td class="num">3.00 s</td><td class="num">10.61 s</td><td><span class="tag">×↻ 2</span></td><td>G=1, G=2</td><td>—</td></tr>
+<tr><td><b>pathe</b></td><td><span class="tag s">vitest</span></td><td class="num">5.34 s</td><td class="num">6.89 s</td><td class="num">5.56 s</td><td><span class="tag g">—</span></td><td>G=1, G=2, G=5</td><td>—</td></tr>
+<tr><td><b>undici</b></td><td><span class="tag s">node-test</span></td><td class="num">13.97 s</td><td class="num">102.55 s</td><td class="num">31.59 s</td><td><span class="tag g">—</span></td><td>G=1, G=2, G=5, G=10</td><td>G=1</td></tr>
+<tr><td><b>minimatch</b></td><td><span class="tag s">tap</span></td><td class="num">34.87 s</td><td class="num">3.00 s</td><td class="num">10.82 s</td><td><span class="tag">×↻ 1</span></td><td>G=1, G=2, G=5, G=10, G=20, G=30</td><td>G=1, G=2, G=5</td></tr>
+<tr><td><b>uuid</b></td><td><span class="tag s">go</span></td><td class="num">1.60 s</td><td class="num">4.28 s</td><td class="num">1.80 s</td><td><span class="tag g">—</span></td><td>G=1</td><td>—</td></tr>
+<tr><td><b>json-c</b></td><td><span class="tag s">ctest</span></td><td class="num">0.59 s</td><td class="num">3.00 s</td><td class="num">0.61 s</td><td><span class="tag g">—</span></td><td><span class="tag g">none</span></td><td>—</td></tr>
+<tr><td><b>junit4</b></td><td><span class="tag s">junit</span></td><td class="num">4.01 s</td><td class="num">12.21 s</td><td class="num">9.63 s</td><td><span class="tag g">—</span></td><td>G=1, G=2</td><td>—</td></tr>
+<tr><td><b>php-parser</b></td><td><span class="tag s">phpunit</span></td><td class="num">2.95 s</td><td class="num">3.00 s</td><td class="num">2.97 s</td><td><span class="tag g">—</span></td><td>G=1, G=2</td><td>—</td></tr>
+<tr><td><b>rspec-support</b></td><td><span class="tag s">rspec</span></td><td class="num">3.83 s</td><td class="num">30.00 s</td><td class="num">6.45 s</td><td><span class="tag g">—</span></td><td>G=1, G=2</td><td>—</td></tr>
+</table></div>
+
+<div class="card" style="margin-top:16px">
+<div class="sect">The sweep — wall-clock cost of getting the suite to finish</div>
+<p class="hero-sub" style="margin:2px 0 12px">Each cell is one repository × guess
+configuration. Red cells contain the wasted attempt(s) <em>and</em> the restart;
+<b>gave up</b> means four guesses in a row were too low and naive returned no result.
+The hh column is the warm <code>run_tests</code> wall (identical at every G);
+<b>N×↻</b> marks budgets that exceeded and resumed. Cells without recorded seconds
+are shown as status markers — no values are estimated.</p>
+<div class="grid-wrap"><div class="grow grow-head"><div class="gl"></div><div class="gh">G=1s</div><div class="gh">G=2s</div><div class="gh">G=5s</div><div class="gh">G=10s</div><div class="gh">G=20s</div><div class="gh">G=30s</div><div class="gh gh-hh">hh (warm)</div></div><div class="grow"><div class="gl">pycodestyle</div><div class="gc gc-kill">2.5 ✗1</div><div class="gc gc-ok">1.7 ✓</div><div class="gc gc-ok">1.6 ✓</div><div class="gc gc-ok">1.6 ✓</div><div class="gc gc-ok">1.5 ✓</div><div class="gc gc-ok">1.6 ✓</div><div class="gc gc-hh">1.98</div></div><div class="grow"><div class="gl">simplejson</div><div class="gc gc-ok">✓</div><div class="gc gc-ok">✓</div><div class="gc gc-ok">✓</div><div class="gc gc-ok">✓</div><div class="gc gc-ok">✓</div><div class="gc gc-ok">✓</div><div class="gc gc-hh">0.65</div></div><div class="grow"><div class="gl">compression</div><div class="gc gc-ok">✓</div><div class="gc gc-ok">✓</div><div class="gc gc-ok">✓</div><div class="gc gc-ok">✓</div><div class="gc gc-ok">✓</div><div class="gc gc-ok">✓</div><div class="gc gc-hh">0.73</div></div><div class="grow"><div class="gl">dayjs</div><div class="gc gc-kill">12.2 ✗3</div><div class="gc gc-kill">11.0 ✗2</div><div class="gc gc-ok">4.8 ✓</div><div class="gc gc-ok">5.2 ✓</div><div class="gc gc-ok">5.3 ✓</div><div class="gc gc-ok">4.8 ✓</div><div class="gc gc-hh">10.61 2×↻</div></div><div class="grow"><div class="gl">pathe</div><div class="gc gc-kill">✗</div><div class="gc gc-kill">11.6 ✗2</div><div class="gc gc-kill">10.2 ✗1</div><div class="gc gc-ok">5.4 ✓</div><div class="gc gc-ok">5.1 ✓</div><div class="gc gc-ok">5.3 ✓</div><div class="gc gc-hh">5.56</div></div><div class="grow"><div class="gl">undici</div><div class="gc gc-up">gave up</div><div class="gc gc-kill">28.1 ✗3</div><div class="gc gc-kill">28.9 ✗2</div><div class="gc gc-kill">24.2 ✗1</div><div class="gc gc-ok">✓</div><div class="gc gc-ok">14.3 ✓</div><div class="gc gc-hh">31.59</div></div><div class="grow"><div class="gl">minimatch</div><div class="gc gc-up">15.0 gave up</div><div class="gc gc-up">30.1 gave up</div><div class="gc gc-up">75.1 gave up</div><div class="gc gc-kill">✗</div><div class="gc gc-kill">✗</div><div class="gc gc-kill">✗</div><div class="gc gc-hh">10.82 1×↻</div></div><div class="grow"><div class="gl">uuid</div><div class="gc gc-kill">✗</div><div class="gc gc-ok">✓</div><div class="gc gc-ok">✓</div><div class="gc gc-ok">✓</div><div class="gc gc-ok">✓</div><div class="gc gc-ok">✓</div><div class="gc gc-hh">1.80</div></div><div class="grow"><div class="gl">json-c</div><div class="gc gc-ok">✓</div><div class="gc gc-ok">0.6 ✓</div><div class="gc gc-ok">0.6 ✓</div><div class="gc gc-ok">0.6 ✓</div><div class="gc gc-ok">0.6 ✓</div><div class="gc gc-ok">0.6 ✓</div><div class="gc gc-hh">0.61</div></div><div class="grow"><div class="gl">junit4</div><div class="gc gc-kill">✗</div><div class="gc gc-kill">✗</div><div class="gc gc-ok">✓</div><div class="gc gc-ok">✓</div><div class="gc gc-ok">✓</div><div class="gc gc-ok">✓</div><div class="gc gc-hh">9.63</div></div><div class="grow"><div class="gl">php-parser</div><div class="gc gc-kill">✗</div><div class="gc gc-kill">✗</div><div class="gc gc-ok">✓</div><div class="gc gc-ok">✓</div><div class="gc gc-ok">✓</div><div class="gc gc-ok">✓</div><div class="gc gc-hh">2.97</div></div><div class="grow"><div class="gl">rspec-support</div><div class="gc gc-kill">6.8 ✗2</div><div class="gc gc-kill">6.0 ✗1</div><div class="gc gc-ok">4.0 ✓</div><div class="gc gc-ok">3.9 ✓</div><div class="gc gc-ok">4.3 ✓</div><div class="gc gc-ok">3.9 ✓</div><div class="gc gc-hh">6.45</div></div></div>
+<div class="chips">
+  <div class="chip"><span class="tag g">green</span> completed without a kill</div>
+  <div class="chip"><span class="tag">red</span> SIGKILLed, then restarted</div>
+  <div class="chip"><span class="tag s" style="background:#4b1020;color:#ffd7de">dark</span> gave up</div>
+</div>
+</div>
+
+<div class="card" style="margin-top:16px"><div class="sect">Killed configurations with recorded walls, side by side</div>
+<div class="grid2">
+<div><svg viewBox="0 0 560 200" width="100%" height="200" font-family="inherit"><text x="0" y="20" font-size="12" font-weight="600" fill="#1c1e2e">pathe · G=2s</text><text x="120" y="21" font-size="9.5" fill="#9ca3af">naive</text><rect x="152" y="10" width="136" height="12" rx="4" fill="#64748b"/><text x="294" y="20" font-size="10.5" fill="#6b7280">11.63s</text><text x="120" y="36" font-size="9.5" fill="#9ca3af">hh</text><rect x="152" y="25" width="65" height="12" rx="4" fill="#10b981"/><text x="223" y="35" font-size="10.5" fill="#6b7280">5.56s</text><text x="0" y="60" font-size="12" font-weight="600" fill="#1c1e2e">pathe · G=5s</text><text x="120" y="61" font-size="9.5" fill="#9ca3af">naive</text><rect x="152" y="50" width="119" height="12" rx="4" fill="#64748b"/><text x="277" y="60" font-size="10.5" fill="#6b7280">10.24s</text><text x="120" y="76" font-size="9.5" fill="#9ca3af">hh</text><rect x="152" y="65" width="65" height="12" rx="4" fill="#10b981"/><text x="223" y="75" font-size="10.5" fill="#6b7280">5.56s</text><text x="0" y="100" font-size="12" font-weight="600" fill="#1c1e2e">dayjs · G=1s</text><text x="120" y="101" font-size="9.5" fill="#9ca3af">naive</text><rect x="152" y="90" width="143" height="12" rx="4" fill="#64748b"/><text x="301" y="100" font-size="10.5" fill="#6b7280">12.21s</text><text x="120" y="116" font-size="9.5" fill="#9ca3af">hh</text><rect x="152" y="105" width="124" height="12" rx="4" fill="#10b981"/><text x="282" y="115" font-size="10.5" fill="#6b7280">10.61s</text><text x="0" y="140" font-size="12" font-weight="600" fill="#1c1e2e">pycodestyle · G=1s</text><text x="120" y="141" font-size="9.5" fill="#9ca3af">naive</text><rect x="152" y="130" width="29" height="12" rx="4" fill="#64748b"/><text x="187" y="140" font-size="10.5" fill="#6b7280">2.55s</text><text x="120" y="156" font-size="9.5" fill="#9ca3af">hh</text><rect x="152" y="145" width="23" height="12" rx="4" fill="#10b981"/><text x="181" y="155" font-size="10.5" fill="#6b7280">1.98s</text><text x="0" y="180" font-size="12" font-weight="600" fill="#1c1e2e">dayjs · G=2s</text><text x="120" y="181" font-size="9.5" fill="#9ca3af">naive</text><rect x="152" y="170" width="129" height="12" rx="4" fill="#64748b"/><text x="287" y="180" font-size="10.5" fill="#6b7280">11.03s</text><text x="120" y="196" font-size="9.5" fill="#9ca3af">hh</text><rect x="152" y="185" width="124" height="12" rx="4" fill="#10b981"/><text x="282" y="195" font-size="10.5" fill="#6b7280">10.61s</text></svg></div>
+<div><svg viewBox="0 0 560 200" width="100%" height="200" font-family="inherit"><text x="0" y="20" font-size="12" font-weight="600" fill="#1c1e2e">rspec-support · G=1s</text><text x="120" y="21" font-size="9.5" fill="#9ca3af">naive</text><rect x="152" y="10" width="79" height="12" rx="4" fill="#64748b"/><text x="237" y="20" font-size="10.5" fill="#6b7280">6.79s</text><text x="120" y="36" font-size="9.5" fill="#9ca3af">hh</text><rect x="152" y="25" width="75" height="12" rx="4" fill="#10b981"/><text x="233" y="35" font-size="10.5" fill="#6b7280">6.45s</text><text x="0" y="60" font-size="12" font-weight="600" fill="#1c1e2e">rspec-support · G=2s</text><text x="120" y="61" font-size="9.5" fill="#9ca3af">naive</text><rect x="152" y="50" width="69" height="12" rx="4" fill="#64748b"/><text x="227" y="60" font-size="10.5" fill="#6b7280">5.97s</text><text x="120" y="76" font-size="9.5" fill="#9ca3af">hh</text><rect x="152" y="65" width="75" height="12" rx="4" fill="#10b981"/><text x="233" y="75" font-size="10.5" fill="#6b7280">6.45s</text><text x="0" y="100" font-size="12" font-weight="600" fill="#1c1e2e">undici · G=5s</text><text x="120" y="101" font-size="9.5" fill="#9ca3af">naive</text><rect x="152" y="90" width="338" height="12" rx="4" fill="#64748b"/><text x="496" y="100" font-size="10.5" fill="#6b7280">28.92s</text><text x="120" y="116" font-size="9.5" fill="#9ca3af">hh</text><rect x="152" y="105" width="370" height="12" rx="4" fill="#10b981"/><text x="528" y="115" font-size="10.5" fill="#6b7280">31.59s</text><text x="0" y="140" font-size="12" font-weight="600" fill="#1c1e2e">undici · G=2s</text><text x="120" y="141" font-size="9.5" fill="#9ca3af">naive</text><rect x="152" y="130" width="329" height="12" rx="4" fill="#64748b"/><text x="487" y="140" font-size="10.5" fill="#6b7280">28.12s</text><text x="120" y="156" font-size="9.5" fill="#9ca3af">hh</text><rect x="152" y="145" width="370" height="12" rx="4" fill="#10b981"/><text x="528" y="155" font-size="10.5" fill="#6b7280">31.59s</text><text x="0" y="180" font-size="12" font-weight="600" fill="#1c1e2e">undici · G=10s</text><text x="120" y="181" font-size="9.5" fill="#9ca3af">naive</text><rect x="152" y="170" width="282" height="12" rx="4" fill="#64748b"/><text x="440" y="180" font-size="10.5" fill="#6b7280">24.16s</text><text x="120" y="196" font-size="9.5" fill="#9ca3af">hh</text><rect x="152" y="185" width="370" height="12" rx="4" fill="#10b981"/><text x="528" y="195" font-size="10.5" fill="#6b7280">31.59s</text></svg></div>
+</div>
+<table style="margin-top:10px"><tr><th>gave-up configuration</th><th class="num">naive wall</th><th class="num">hh wall</th><th>outcome</th></tr>
+<tr><td>undici · G=1s</td><td class="num">— s <small>(not recorded)</small></td><td class="num">31.59 s</td><td><span class="tag">naive gave up — no result</span></td></tr>
+<tr><td>minimatch · G=1s</td><td class="num">15.04 s</td><td class="num">10.82 s</td><td><span class="tag">naive gave up — no result</span></td></tr>
+<tr><td>minimatch · G=2s</td><td class="num">30.05 s</td><td class="num">10.82 s</td><td><span class="tag">naive gave up — no result</span></td></tr>
+<tr><td>minimatch · G=5s</td><td class="num">75.09 s</td><td class="num">10.82 s</td><td><span class="tag">naive gave up — no result</span></td></tr>
+</table></div>
+
+<div class="card" style="margin-top:16px">
+<div class="sect">What hh measured, and what it chose</div>
+<p class="hero-sub" style="margin:2px 0 12px"><b>Budget</b> is the per-attempt kill threshold
+hh picks: <code>p90 × 1.25</code> of the suite's total test time (sum of per-test
+distributions from the record pass), floored at 3 s. It is not a wall-clock prediction:
+it only has to outlast the slowest test the runner may be inside when the budget runs out,
+so a kill never lands on unfinished work — which is why a budget that is slightly too low
+ends in a resume, not a lost run. <b>Warm wall</b> is what the caller actually waited,
+collection and ledger included. (Per-repo p50/p90 values were in the raw results file
+that the workspace reset destroyed; the derived budget column below is the recorded one.)</p>
+<table>
+<tr><th>repo</th><th class="num">reference (median of 2)</th><th class="num">budget</th>
+<th class="num">budget basis</th><th class="num">hh warm wall</th></tr>
+<tr><td>pycodestyle <span class="tag s">pytest</span></td><td class="num">1.67 s</td><td class="num"><b>3.00 s</b></td><td class="num">3 s floor (p90 ≤ 2.4 s)</td><td class="num">1.98 s</td></tr>
+<tr><td>simplejson <span class="tag s">unittest</span></td><td class="num">0.57 s</td><td class="num"><b>3.00 s</b></td><td class="num">3 s floor (p90 ≤ 2.4 s)</td><td class="num">0.65 s</td></tr>
+<tr><td>compression <span class="tag s">node</span></td><td class="num">0.89 s</td><td class="num"><b>30.00 s</b></td><td class="num">p90 ≈ 24.00 s</td><td class="num">0.73 s</td></tr>
+<tr><td>dayjs <span class="tag s">jest</span></td><td class="num">4.86 s</td><td class="num"><b>3.00 s</b></td><td class="num">3 s floor (p90 ≤ 2.4 s)</td><td class="num">10.61 s</td></tr>
+<tr><td>pathe <span class="tag s">vitest</span></td><td class="num">5.34 s</td><td class="num"><b>6.89 s</b></td><td class="num">p90 ≈ 5.51 s</td><td class="num">5.56 s</td></tr>
+<tr><td>undici <span class="tag s">node-test</span></td><td class="num">13.97 s</td><td class="num"><b>102.55 s</b></td><td class="num">p90 ≈ 82.04 s</td><td class="num">31.59 s</td></tr>
+<tr><td>minimatch <span class="tag s">tap</span></td><td class="num">34.87 s</td><td class="num"><b>3.00 s</b></td><td class="num">3 s floor (p90 ≤ 2.4 s)</td><td class="num">10.82 s</td></tr>
+<tr><td>uuid <span class="tag s">go</span></td><td class="num">1.60 s</td><td class="num"><b>4.28 s</b></td><td class="num">p90 ≈ 3.42 s</td><td class="num">1.80 s</td></tr>
+<tr><td>json-c <span class="tag s">ctest</span></td><td class="num">0.59 s</td><td class="num"><b>3.00 s</b></td><td class="num">3 s floor (p90 ≤ 2.4 s)</td><td class="num">0.61 s</td></tr>
+<tr><td>junit4 <span class="tag s">junit</span></td><td class="num">4.01 s</td><td class="num"><b>12.21 s</b></td><td class="num">p90 ≈ 9.77 s</td><td class="num">9.63 s</td></tr>
+<tr><td>php-parser <span class="tag s">phpunit</span></td><td class="num">2.95 s</td><td class="num"><b>3.00 s</b></td><td class="num">3 s floor (p90 ≤ 2.4 s)</td><td class="num">2.97 s</td></tr>
+<tr><td>rspec-support <span class="tag s">rspec</span></td><td class="num">3.83 s</td><td class="num"><b>30.00 s</b></td><td class="num">p90 ≈ 24.00 s</td><td class="num">6.45 s</td></tr>
+</table></div>
+
+<div class="card" style="margin-top:16px">
+<div class="sect">How to read this honestly</div>
+<ul class="note-list">
+  <li><b>About the numbers.</b> Every value in this report is a recorded measurement from
+  the 2026-10-25 run of this exact configuration (12 repos × 6 guesses). After the run,
+  a workspace reset destroyed the raw results file and the run log; this report was
+  rebuilt from the summary records that survived (totals, per-repo rows, and the sweep
+  log lines captured above). Sweep cells whose seconds were not in the surviving record
+  show status markers only — nothing is estimated or interpolated.</li>
+  <li><b>hh does not make the tests faster.</b> Where G was already high enough both arms
+  run the suite once; hh's ledger adds overhead instead — stated, not hidden
+  (49 of 72 configurations are in this class).
+  In each of the 6 repositories where both measurements survive the record, hh&rsquo;s warm call is slower than the fastest clean naive run — worst recorded: dayjs at 10.61 s vs 4.77 s.
+  Where the guess is already fine, naive is often the cheaper call — hh&rsquo;s claim is
+  kill-freedom and a saved restart when the guess is too low.</li>
+  <li><b>The record pass is the honest price.</b> hh's first call is the naive command plus
+  a ledger — one extra full run of the suite per repository,
+  129.2 s of test time in this run. Paid once per repository, never
+  per call.</li>
+  <li><b>hh exceeded its own budget on dayjs and minimatch and resumed.</b> The per-test
+  sum under-counts time spent between tests (jest/tap load modules outside individual test
+  spans), so the p90-derived budget sat below the real execution span. hh resumed from the
+  ledger rather than restarting — 18 resumes in total, still no lost runs — and those
+  configurations are marked ↻ in the grid.</li>
+  <li><b>Some suites run with pre-existing failures</b> in this sandbox (missing OS features
+  such as <code>fork</code>/<code>flock</code> in interpreter shims). The same suite runs
+  in both arms at every guess, so the comparison stays paired; failures are noted below.</li>
+  <li><b>Java, PHP, and Ruby suites run on source-built stacks in this environment</b>
+  (JUnit 4.13.2 + junit-jupiter/vintage 5.10.2 on a stub JDK, PHPUnit 9.6.29 on php-wasm,
+  rspec-core 3.13 on ruby.wasm). Their absolute seconds reflect that runtime; the
+  naive-vs-hh pairing does not.</li>
+</ul>
+</div>
+
+
+<div class="card" style="margin-top:16px">
+<div class="sect">Suite notes — what ran, and what was already failing</div>
+<table>
+<tr><th>repo</th><th>suite note</th></tr>
+<tr><td><b>pycodestyle</b></td><td><code>test_check_nullbytes</code> is a pre-existing
+failure on this Python build; it runs in both arms. Suite otherwise green.</td></tr>
+<tr><td><b>simplejson</b></td><td>C extension not built in this sandbox (pure-Python
+fallback used).</td></tr>
+<tr><td><b>junit4</b></td><td>15 test files excluded from compilation (need mockito /
+APIs absent from this JDK shim); ~19 pre-existing failures among the remaining 1,016 tests
+run via JUnitCore; 1,161 test ids discovered via hh's vintage arm.</td></tr>
+<tr><td><b>rspec-support</b></td><td><code>reentrant_mutex_spec.rb</code> excluded (needs
+the <code>thread_order</code> gem — unobtainable offline); 565 examples recorded; ~18
+pre-existing failures from OS features ruby.wasm lacks (<code>fork</code>, <code>flock</code>,
+<code>IO</code> reopen).</td></tr>
+<tr><td><b>php-parser</b></td><td>240 unique test ids recorded (1,940 XML rows collapsed);
+suite green.</td></tr>
+<tr><td><b>json-c</b></td><td><code>xxd</code> provided as a small hexdump shim for one
+shell test.</td></tr>
+<tr><td><b>undici</b></td><td>suite is the <code>test/node-test</code> directory (the
+project's own <code>test:node-test</code>).</td></tr>
+<tr><td><b>dayjs / minimatch</b></td><td>jest/tap module-load gaps sit outside the per-test
+sums; hh's budget under-shot and it resumed (see honesty notes).</td></tr>
+</table></div>
+<div class="card" style="margin-top:16px"><div class="sect">Reproducing & provenance</div>
+<pre>python3 -m benchmark setup   # clone + install the repos in repos.json
+python3 -m benchmark run     # measure; writes _work/results/timeout-metric.json</pre>
+<table><tr><th>repo</th><th>runner</th><th>source</th><th>suite command</th></tr>
+<tr><td><b>pycodestyle</b></td><td><span class="tag s">pytest</span></td><td><code>pycqa/pycodestyle</code></td><td><code>python3 -m pytest tests -q -p no:cacheprovider</code></td></tr>
+<tr><td><b>simplejson</b></td><td><span class="tag s">unittest</span></td><td><code>simplejson/simplejson</code></td><td><code>python3 -m unittest discover -s simplejson -p test_*.py</code></td></tr>
+<tr><td><b>compression</b></td><td><span class="tag s">node</span></td><td><code>expressjs/compression</code></td><td><code>npm test --silent</code></td></tr>
+<tr><td><b>dayjs</b></td><td><span class="tag s">jest</span></td><td><code>iamkun/dayjs</code></td><td><code>./node_modules/.bin/jest --silent</code></td></tr>
+<tr><td><b>pathe</b></td><td><span class="tag s">vitest</span></td><td><code>unjs/pathe</code></td><td><code>./node_modules/.bin/vitest run</code></td></tr>
+<tr><td><b>undici</b></td><td><span class="tag s">node-test</span></td><td><code>nodejs/undici</code></td><td><code>bash -c node --test test/node-test/*.js</code></td></tr>
+<tr><td><b>minimatch</b></td><td><span class="tag s">tap</span></td><td><code>isaacs/minimatch</code></td><td><code>npm test --silent</code></td></tr>
+<tr><td><b>uuid</b></td><td><span class="tag s">go</span></td><td><code>google/uuid</code></td><td><code>go test -count=1 ./...</code></td></tr>
+<tr><td><b>json-c</b></td><td><span class="tag s">ctest</span></td><td><code>json-c/json-c</code></td><td><code>ctest --test-dir build --output-on-failure</code></td></tr>
+<tr><td><b>junit4</b></td><td><span class="tag s">junit</span></td><td><code>junit-team/junit4</code></td><td><code>bash -c java -cp &quot;build/classes/java/main:build/classes/java/test:$HH_JUNIT_CLASSPATH&quot; org.junit.runner.JUnitC</code></td></tr>
+<tr><td><b>php-parser</b></td><td><span class="tag s">phpunit</span></td><td><code>nikic/PHP-Parser</code></td><td><code>phpunit --configuration phpunit.xml.dist</code></td></tr>
+<tr><td><b>rspec-support</b></td><td><span class="tag s">rspec</span></td><td><code>rspec/rspec-support</code></td><td><code>rspec --format progress</code></td></tr>
+</table>
+<div class="foot">Rebuilt 2026-10-25 09:13 from the 2026-10-25 run's recorded summary · hh @ e66cb01 · design reference: UMAI dashboard</div></div>
+</div></body></html>

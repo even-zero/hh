@@ -1,87 +1,107 @@
 {
-  "note": "Ten repositories with mixed runners. `suite` is the command a naive caller runs and SIGKILLs on a timeout; `root` is the directory hh measures (relative to the repo checkout). Pick fresh repos by re-running `python3 -m benchmark setup`.",
+  "note": "Fresh repositories for the 2026-10-25 re-run — one per supported test runner (nextest excluded: no cargo in this environment). `suite` is the command a naive caller runs and SIGKILLs on a timeout; `root` is the directory hh measures (relative to the repo checkout).",
   "repos": [
     {
-      "id": "click",
-      "url": "https://github.com/pallets/click.git",
+      "id": "pycodestyle",
+      "url": "https://github.com/pycqa/pycodestyle.git",
       "runner": "pytest",
       "root": ".",
       "suite": ["python3", "-m", "pytest", "tests", "-q", "-p", "no:cacheprovider"],
       "install": [["pip", "install", "--break-system-packages", "-q", "-e", "."]]
     },
     {
-      "id": "docutils",
-      "url": "https://github.com/docutils/docutils.git",
-      "runner": "unittest",
-      "root": "docutils",
-      "suite": ["python3", "-m", "unittest", "discover", "-s", "test", "-p", "test_*.py"],
-      "install": []
-    },
-    {
-      "id": "express",
-      "url": "https://github.com/expressjs/express.git",
-      "runner": "node",
-      "root": ".",
-      "suite": ["./node_modules/.bin/mocha", "--require", "test/support/env", "--reporter", "dot", "test/"],
-      "mocha_require": "test/support/env",
-      "install": [["npm", "install", "--no-audit", "--no-fund", "--loglevel=error"]]
-    },
-    {
-      "id": "itsdangerous",
-      "url": "https://github.com/pallets/itsdangerous.git",
-      "runner": "pytest",
-      "root": ".",
-      "suite": ["python3", "-m", "pytest", "tests", "-q", "-p", "no:cacheprovider"],
-      "install": [["pip", "install", "--break-system-packages", "-q", "freezegun"]]
-    },
-    {
-      "id": "jinja",
-      "url": "https://github.com/pallets/jinja.git",
-      "runner": "pytest",
-      "root": ".",
-      "suite": ["python3", "-m", "pytest", "tests", "-q", "-p", "no:cacheprovider"],
-      "install": [["pip", "install", "--break-system-packages", "-q", "markupsafe", "trio"]]
-    },
-    {
-      "id": "markdown",
-      "url": "https://github.com/python-markdown/markdown.git",
+      "id": "simplejson",
+      "url": "https://github.com/simplejson/simplejson.git",
       "runner": "unittest",
       "root": ".",
-      "suite": ["python3", "-m", "unittest", "discover", "-s", "tests", "-p", "test_*.py"],
-      "install": []
+      "suite": ["python3", "-m", "unittest", "discover", "-s", "simplejson", "-p", "test_*.py"],
+      "install": [["pip", "install", "--break-system-packages", "-q", "-e", "."]]
     },
     {
-      "id": "nock",
-      "url": "https://github.com/nock/nock.git",
+      "id": "compression",
+      "url": "https://github.com/expressjs/compression.git",
       "runner": "node",
       "root": ".",
       "suite": ["npm", "test", "--silent"],
       "install": [["npm", "install", "--no-audit", "--no-fund", "--loglevel=error"]]
     },
     {
-      "id": "pygments",
-      "url": "https://github.com/pygments/pygments.git",
-      "runner": "pytest",
+      "id": "dayjs",
+      "url": "https://github.com/iamkun/dayjs.git",
+      "runner": "jest",
       "root": ".",
-      "suite": ["python3", "-m", "pytest", "tests", "-q", "-p", "no:cacheprovider", "--ignore=tests/contrast"],
+      "suite": ["./node_modules/.bin/jest", "--silent"],
+      "install": [["npm", "install", "--no-audit", "--no-fund", "--loglevel=error"]]
+    },
+    {
+      "id": "pathe",
+      "url": "https://github.com/unjs/pathe.git",
+      "runner": "vitest",
+      "root": ".",
+      "suite": ["./node_modules/.bin/vitest", "run"],
+      "install": [["pnpm", "install"]]
+    },
+    {
+      "id": "undici",
+      "url": "https://github.com/nodejs/undici.git",
+      "runner": "node-test",
+      "root": ".",
+      "suite": ["bash", "-c", "node --test test/node-test/*.js"],
+      "install": [["npm", "install", "--no-audit", "--no-fund", "--loglevel=error"]]
+    },
+    {
+      "id": "minimatch",
+      "url": "https://github.com/isaacs/minimatch.git",
+      "runner": "tap",
+      "root": ".",
+      "suite": ["npm", "test", "--silent"],
+      "install": [["npm", "install", "--no-audit", "--no-fund", "--loglevel=error"]]
+    },
+    {
+      "id": "uuid",
+      "url": "https://github.com/google/uuid.git",
+      "runner": "go",
+      "root": ".",
+      "suite": ["go", "test", "-count=1", "./..."],
+      "install": []
+    },
+    {
+      "id": "json-c",
+      "url": "https://github.com/json-c/json-c.git",
+      "runner": "ctest",
+      "root": ".",
+      "suite": ["ctest", "--test-dir", "build", "--output-on-failure"],
+      "install": [
+        ["cmake", "-S", ".", "-B", "build", "-DCMAKE_BUILD_TYPE=Debug", "-DBUILD_SHARED_LIBS=OFF"],
+        ["cmake", "--build", "build", "-j", "4"]
+      ]
+    },
+    {
+      "id": "junit4",
+      "url": "https://github.com/junit-team/junit4.git",
+      "runner": "junit",
+      "root": ".",
+      "suite": ["bash", "-c", "java -cp \"build/classes/java/main:build/classes/java/test:$HH_JUNIT_CLASSPATH\" org.junit.runner.JUnitCore $(find build/classes/java/test -name '*Test.class' | grep -v '\\$' | sed 's|build/classes/java/test/||; s|\\.class$||; s|/|.|g')"],
+      "install": [
+        ["bash", "-c", "sed -i 's|return (Matcher) CoreMatchers.everyItem(elementMatcher);|return (Matcher) CoreMatchers.everyItem(elementMatcher);|; s|return CoreMatchers.everyItem(elementMatcher);|return (Matcher) CoreMatchers.everyItem(elementMatcher);|' src/main/java/org/junit/matchers/JUnitMatchers.java && mkdir -p build/classes/java/main build/classes/java/test && javac -cp \"$HH_JUNIT_CLASSPATH\" -d build/classes/java/main $(find src/main/java -name '*.java') && find src/test/java -name '*.java' | grep -v -e AllCoreTests.java -e AllExperimentalTests.java -e AllJUnit3CompatibilityTests.java -e AllMaxTests.java -e AllModelTests.java -e AllRulesTests.java -e AllRunnersTests.java -e AllRunningTests.java -e AllTests.java -e AllTheoriesRunnerTests.java -e AllTheoriesTests.java -e CommandLineTest.java -e ErrorCollectorTest.java -e JUnitCoreReturnsCorrectExitCodeTest.java -e MainRunner.java -e MaxStarterTest.java -e OldTests.java -e TestClassTest.java -e TimeoutRuleTest.java -e WithDataPointMethod.java | xargs javac -cp \"$HH_JUNIT_CLASSPATH:build/classes/java/main\" -d build/classes/java/test"]
+      ]
+    },
+    {
+      "id": "php-parser",
+      "url": "https://github.com/nikic/PHP-Parser.git",
+      "runner": "phpunit",
+      "root": ".",
+      "suite": ["phpunit", "--configuration", "phpunit.xml.dist"],
+      "install": [["python3", "/home/user/toolchains/gen_php_autoload.py", "."]]
+    },
+    {
+      "id": "rspec-support",
+      "url": "https://github.com/rspec/rspec-support.git",
+      "runner": "rspec",
+      "root": ".",
+      "suite": ["rspec", "--format", "progress"],
       "install": [],
-      "env": {"HH_PYTEST_ARGS": "--ignore=tests/contrast"}
-    },
-    {
-      "id": "pyyaml",
-      "url": "https://github.com/yaml/pyyaml.git",
-      "runner": "pytest",
-      "root": ".",
-      "suite": ["python3", "-m", "pytest", "tests", "-q", "-p", "no:cacheprovider"],
-      "install": []
-    },
-    {
-      "id": "supertest",
-      "url": "https://github.com/ladjs/supertest.git",
-      "runner": "node",
-      "root": ".",
-      "suite": ["npm", "test", "--silent"],
-      "install": [["npm", "install", "--no-audit", "--no-fund", "--loglevel=error"]]
+      "env": {"SPEC_OPTS": "--exclude-pattern **/reentrant_mutex_spec.rb"}
     }
   ]
 }
