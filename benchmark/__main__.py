@@ -522,18 +522,6 @@ def _version() -> str:
     return f"{__version__} ({p.stdout.strip()})"
 
 
-def write_reports(out: dict, repos: list[dict]) -> None:
-    """Write both report formats next to each other in benchmark/."""
-    from . import report_html
-    stamp = out.get("date") or time.strftime("%Y-%m-%d")
-    md = os.path.join(HERE, f"REPORT-{stamp}-timeout-metric.md")
-    with open(md, "w", encoding="utf-8") as f:
-        f.write(report(out) + "\n")
-    note(f"[report] wrote {md}")
-    hp = report_html.write(out, repos, os.path.join(HERE, f"REPORT-{stamp}-timeout-metric.html"))
-    note(f"[report] wrote {hp}")
-
-
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(prog="python3 -m benchmark")
     ap.add_argument("--repo", "-r", action="append")
@@ -553,11 +541,17 @@ def main(argv=None) -> int:
         if only:
             note("[run] partial run; report skipped")
         else:
-            write_reports(out, repos)
+            path = os.path.join(HERE, f"REPORT-{time.strftime('%Y-%m-%d')}-timeout-metric.md")
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(report(out) + "\n")
+            note(f"[report] wrote {path}")
     if args.cmd == "report":
         with open(os.path.join(RESULTS, "timeout-metric.json"), encoding="utf-8") as f:
             out = json.load(f)
-        write_reports(out, repos)
+        path = os.path.join(HERE, f"REPORT-{time.strftime('%Y-%m-%d')}-timeout-metric.md")
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(report(out) + "\n")
+        note(f"[report] wrote {path}")
     return 0
 
 
