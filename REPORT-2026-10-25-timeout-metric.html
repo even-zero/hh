@@ -335,6 +335,47 @@ table td.num, table th.num { white-space:nowrap; }
   workspace members are trimmed and the optional rustc-std-workspace-core dep is
   dropped so the crate resolves fully offline (no crate or test code changed).</td></tr>
 </table></div>
+
+<div class="card">
+  <div class="sect">How to read this honestly</div>
+  <ul class="note-list">
+    <li><b>What this measures.</b> A caller must give a test suite a timeout. Too low and
+    the suite is SIGKILLed — the work is lost and the whole thing runs again. hh exists to
+    make that not happen, so the benchmark measures two things: whether hh's budget avoids
+    the kill when the guess is too low, and how many seconds that saves. The sweep is the
+    same experiment at six values of G (1, 2, 5, 10, 20, 30 s);
+    <code>naive</code> doubles G and restarts from zero on a kill, <code>hh</code> records
+    the suite once and then runs under a measured budget that does not depend on G.</li>
+    <li><b>The test counts are adapter counts.</b> 2,974 individual test cases were enumerated across the 12 repositories &mdash; the ids each runner's adapter can list, timed by the record pass and re-run in every configuration. Two caveats in opposite directions: phpunit lists test methods without expanding data providers, so php-parser really executes more than the 317 ids it reports; junit only counts the 286 test classes that compile against the JDK-8 shim (1,163 cases, 20 files excluded). rspec-support contributed none.</li>
+    <li><b>hh does not make the tests faster.</b> Where G was already high enough both arms
+    run the suite once; hh's ledger adds overhead instead — stated, not hidden
+    (52 of 72 configurations are in this class, and in those the naive caller wins by a fraction of a second to a couple of seconds).
+    In 9 of 12 repositories hh&rsquo;s warm call is slower than the fastest clean naive run — worst recorded: undici at 31.95 s vs 13.13 s. Where the guess is already fine, naive is often the cheaper call.</li>
+    <li><b>The record pass is the honest price.</b> hh's first call is the naive command plus
+    a ledger — one extra full run of the suite per repository,
+    118.0 s of test time in this run, over 2,974 individual test cases. Paid once per repository, never
+    per call.</li>
+    <li><b>hh exceeded its own budget on dayjs, minimatch and resumed.</b> The per-test sum under-counts time spent between tests (jest/tap load modules outside individual test spans), so the p90-derived budget sat below the real execution span. hh resumed from the ledger rather than restarting — the resume path, not a lost run.</li>
+    <li><b>Budgets hit the 3 s floor on small suites.</b> On a slower machine or a larger
+    suite every number scales with the suite's duration D.</li>
+    <li><b>Some suites run with pre-existing failures</b> in this sandbox (missing OS features
+    such as <code>fork</code>/<code>flock</code> in interpreter shims). The same suite runs
+    in both arms at every guess, so the comparison stays paired; failures are noted in the
+    suite notes above.</li>
+    <li><b>Java, PHP, and Ruby suites run on source-built stacks in this environment</b>
+    (JUnit 4.13.2 + junit-jupiter/vintage 5.10.2 on a stub JDK, PHPUnit 9.5.28 on
+    php-wasm). Their absolute seconds reflect that runtime; the
+    naive-vs-hh pairing does not.</li>
+    <li><b>Coverage:</b> 13 repositories were set up — one per supported runner — and 12
+    completed the sweep. rspec-support is the exception: this sandbox only allows Ruby
+    through a WebAssembly build whose host-file I/O segfaults under the suite's load, so
+    its reference run never finished; it has no measured row and is not counted in any
+    total above. The Rust row is <code>rust-lang/libc</code> on the nextest adapter (a
+    zero-dependency crate, so the runner's own vendored build suffices offline).</li>
+  </ul>
+
+</div>
+
 <div class="card"><div class="sect">Reproducing & provenance</div>
 <pre>python3 -m benchmark setup    # clone + install the repos in repos.json
 python3 -m benchmark run      # measure; the harness writes this report</pre>
@@ -375,43 +416,4 @@ python3 -m benchmark run      # measure; the harness writes this report</pre>
   <tr><td><b>Go 1.27</b></td><td>static go toolchain from the wheel mirror.</td></tr>
   </table></div>
 <div class="foot">Generated 2026-10-25 by the hh benchmark harness · hh @  · <a href="https://evenzero.in">evenzero</a></div></div>
-
-<div class="card">
-  <div class="sect">How to read this honestly</div>
-  <ul class="note-list">
-    <li><b>What this measures.</b> A caller must give a test suite a timeout. Too low and
-    the suite is SIGKILLed — the work is lost and the whole thing runs again. hh exists to
-    make that not happen, so the benchmark measures two things: whether hh's budget avoids
-    the kill when the guess is too low, and how many seconds that saves. The sweep is the
-    same experiment at six values of G (1, 2, 5, 10, 20, 30 s);
-    <code>naive</code> doubles G and restarts from zero on a kill, <code>hh</code> records
-    the suite once and then runs under a measured budget that does not depend on G.</li>
-    <li><b>The test counts are adapter counts.</b> 2,974 individual test cases were enumerated across the 12 repositories &mdash; the ids each runner's adapter can list, timed by the record pass and re-run in every configuration. Two caveats in opposite directions: phpunit lists test methods without expanding data providers, so php-parser really executes more than the 317 ids it reports; junit only counts the 286 test classes that compile against the JDK-8 shim (1,163 cases, 20 files excluded). rspec-support contributed none.</li>
-    <li><b>hh does not make the tests faster.</b> Where G was already high enough both arms
-    run the suite once; hh's ledger adds overhead instead — stated, not hidden
-    (52 of 72 configurations are in this class, and in those the naive caller wins by a fraction of a second to a couple of seconds).
-    In 9 of 12 repositories hh&rsquo;s warm call is slower than the fastest clean naive run — worst recorded: undici at 31.95 s vs 13.13 s. Where the guess is already fine, naive is often the cheaper call.</li>
-    <li><b>The record pass is the honest price.</b> hh's first call is the naive command plus
-    a ledger — one extra full run of the suite per repository,
-    118.0 s of test time in this run, over 2,974 individual test cases. Paid once per repository, never
-    per call.</li>
-    <li><b>hh exceeded its own budget on dayjs, minimatch and resumed.</b> The per-test sum under-counts time spent between tests (jest/tap load modules outside individual test spans), so the p90-derived budget sat below the real execution span. hh resumed from the ledger rather than restarting — the resume path, not a lost run.</li>
-    <li><b>Budgets hit the 3 s floor on small suites.</b> On a slower machine or a larger
-    suite every number scales with the suite's duration D.</li>
-    <li><b>Some suites run with pre-existing failures</b> in this sandbox (missing OS features
-    such as <code>fork</code>/<code>flock</code> in interpreter shims). The same suite runs
-    in both arms at every guess, so the comparison stays paired; failures are noted in the
-    suite notes above.</li>
-    <li><b>Java, PHP, and Ruby suites run on source-built stacks in this environment</b>
-    (JUnit 4.13.2 + junit-jupiter/vintage 5.10.2 on a stub JDK, PHPUnit 9.5.28 on
-    php-wasm). Their absolute seconds reflect that runtime; the
-    naive-vs-hh pairing does not.</li>
-    <li><b>Coverage:</b> 13 repositories were set up — one per supported runner — and 12
-    completed the sweep. rspec-support is the exception: this sandbox only allows Ruby
-    through a WebAssembly build whose host-file I/O segfaults under the suite's load, so
-    its reference run never finished; it has no measured row and is not counted in any
-    total above. The Rust row is <code>rust-lang/libc</code> on the nextest adapter (a
-    zero-dependency crate, so the runner's own vendored build suffices offline).</li>
-  </ul>
-
-</div></body></html>
+</body></html>
