@@ -1,5 +1,4 @@
-# hh
-## smart timeout adapter for your agents
+# hh - smart timeout adapter for your agents
 
 A caller that runs a test suite has to give it a timeout. If the timeout is too
 low the suite is **SIGKILLed**, the work is thrown away, and the caller runs it
@@ -46,21 +45,21 @@ package is `executor`.
 
 ## Supported runners
 
-| `--runner` | language | frameworks | doc |
-|---|---|---|---|
-| `pytest` | Python | pytest | [docs/pytest.md](docs/pytest.md) |
-| `unittest` | Python | stdlib `unittest` | [docs/unittest.md](docs/unittest.md) |
-| `node` | JavaScript | Mocha | [docs/mocha.md](docs/mocha.md) |
-| `jest` | JavaScript | Jest | [docs/jest.md](docs/jest.md) |
-| `vitest` | JavaScript | Vitest | [docs/vitest.md](docs/vitest.md) |
-| `node-test` | JavaScript | Node's built-in `node:test` | [docs/node-test.md](docs/node-test.md) |
-| `tap` | JavaScript | node-tap | [docs/tap.md](docs/tap.md) |
-| `junit` | Java, Kotlin | JUnit 5, JUnit 4 via Vintage, Kotlin suites | [docs/junit.md](docs/junit.md) |
-| `go` | Go | `go test` | [docs/go.md](docs/go.md) |
-| `nextest` | Rust | cargo-nextest | [docs/nextest.md](docs/nextest.md) |
-| `rspec` | Ruby | RSpec | [docs/rspec.md](docs/rspec.md) |
-| `phpunit` | PHP | PHPUnit | [docs/phpunit.md](docs/phpunit.md) |
-| `ctest` | C, C++ | CTest, GoogleTest, Catch2 | [docs/ctest.md](docs/ctest.md) |
+| `--runner`  | language     | frameworks                                  | doc                                    |
+| ----------- | ------------ | ------------------------------------------- | -------------------------------------- |
+| `pytest`    | Python       | pytest                                      | [docs/pytest.md](docs/pytest.md)       |
+| `unittest`  | Python       | stdlib `unittest`                           | [docs/unittest.md](docs/unittest.md)   |
+| `node`      | JavaScript   | Mocha                                       | [docs/mocha.md](docs/mocha.md)         |
+| `jest`      | JavaScript   | Jest                                        | [docs/jest.md](docs/jest.md)           |
+| `vitest`    | JavaScript   | Vitest                                      | [docs/vitest.md](docs/vitest.md)       |
+| `node-test` | JavaScript   | Node's built-in `node:test`                 | [docs/node-test.md](docs/node-test.md) |
+| `tap`       | JavaScript   | node-tap                                    | [docs/tap.md](docs/tap.md)             |
+| `junit`     | Java, Kotlin | JUnit 5, JUnit 4 via Vintage, Kotlin suites | [docs/junit.md](docs/junit.md)         |
+| `go`        | Go           | `go test`                                   | [docs/go.md](docs/go.md)               |
+| `nextest`   | Rust         | cargo-nextest                               | [docs/nextest.md](docs/nextest.md)     |
+| `rspec`     | Ruby         | RSpec                                       | [docs/rspec.md](docs/rspec.md)         |
+| `phpunit`   | PHP          | PHPUnit                                     | [docs/phpunit.md](docs/phpunit.md)     |
+| `ctest`     | C, C++       | CTest, GoogleTest, Catch2                   | [docs/ctest.md](docs/ctest.md)         |
 
 `docs/README.md` has the full matrix — what each runner can discover, how
 finely a run can be resumed, the runners that are deliberately not supported
@@ -69,17 +68,17 @@ share one execution model: [docs/javascript.md](docs/javascript.md).
 
 ## What each call returns
 
-| field | meaning |
-|---|---|
-| `status` | `ok`, `incomplete` (work left), `shard_failed` (runner died) |
-| `budget.basis` | `record` (no measurements yet) or `measured` |
-| `budget.budget_s` | the timeout to give this suite next time |
-| `budget.p50_s`, `budget.p90_s` | the measured distribution the budget comes from |
-| `budget.confidence` | share of the suite that has its own measurements |
-| `attempts` / `timed_out` | runner processes started / killed at the budget |
-| `wall_s` | what the caller waited |
-| `resumed_tests` | tests recognised as already paid for |
-| `unresolved` | ids from an old manifest the runner no longer finds (re-record them; not counted as failures) |
+| field                          | meaning                                                                                       |
+| ------------------------------ | --------------------------------------------------------------------------------------------- |
+| `status`                       | `ok`, `incomplete` (work left), `shard_failed` (runner died)                                  |
+| `budget.basis`                 | `record` (no measurements yet) or `measured`                                                  |
+| `budget.budget_s`              | the timeout to give this suite next time                                                      |
+| `budget.p50_s`, `budget.p90_s` | the measured distribution the budget comes from                                               |
+| `budget.confidence`            | share of the suite that has its own measurements                                              |
+| `attempts` / `timed_out`       | runner processes started / killed at the budget                                               |
+| `wall_s`                       | what the caller waited                                                                        |
+| `resumed_tests`                | tests recognised as already paid for                                                          |
+| `unresolved`                   | ids from an old manifest the runner no longer finds (re-record them; not counted as failures) |
 
 ## How the budget is computed
 
