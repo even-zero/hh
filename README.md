@@ -1,4 +1,5 @@
-# hh — the timeout your test suite actually needs
+# hh
+## smart timeout adapter for your agents
 
 A caller that runs a test suite has to give it a timeout. If the timeout is too
 low the suite is **SIGKILLed**, the work is thrown away, and the caller runs it
